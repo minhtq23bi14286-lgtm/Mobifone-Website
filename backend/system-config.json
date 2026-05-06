@@ -1,0 +1,11 @@
+{
+  "features": {
+    "forum": true,
+    "chat": true,
+    "videoCall": true,
+    "fileUpload": true,
+    "gifSearch": true,
+    "notifications": true
+  },
+  "maxFileSizeMB": 50
+}
