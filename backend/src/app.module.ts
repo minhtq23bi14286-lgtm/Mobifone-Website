@@ -23,6 +23,7 @@ import { SystemModule } from './system/system.module';
       database: 'mobifone_db',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: true,
+      ssl: { rejectUnauthorized: false },
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
