@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor } from "lucide-react";
 import { Socket } from "socket.io-client";
 
+const METERED_API_KEY = "1c1fac6e0fa6ef59b6cbb0fe1a9297ecf24d";
+const METERED_API_URL = `https://mobifone-website.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
+
 interface VideoCallProps {
   socket: Socket;
   currentUser: { id: number; displayName: string };
@@ -22,21 +25,38 @@ export default function VideoCall({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
-  const iceServers = {
-    iceServers: [
+  // Fetch ICE servers từ Metered
+  const fetchIceServers = async (): Promise<RTCIceServer[]> => {
+    try {
+      const res = await fetch(METERED_API_URL);
+      if (res.ok) {
+        const servers = await res.json();
+        console.log('✅ Loaded Metered TURN servers:', servers.length);
+        return servers;
+      }
+    } catch (err) {
+      console.warn('⚠️ Không tải được TURN servers, dùng STUN fallback:', err);
+    }
+    // Fallback về Google STUN
+    return [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
-    ],
+    ];
   };
 
   useEffect(() => {
-    startCall();
+    // Fetch TURN servers rồi mới start call
+    fetchIceServers().then(servers => {
+   
+      startCall(servers);
+    });
 
     socket.on("callAccepted", async ({ signal }: { signal: any }) => {
       if (peerConnectionRef.current) {
@@ -49,9 +69,13 @@ export default function VideoCall({
 
     socket.on("iceCandidate", async ({ candidate }: { candidate: any }) => {
       if (peerConnectionRef.current && candidate) {
-        await peerConnectionRef.current.addIceCandidate(
-          new RTCIceCandidate(candidate)
-        );
+        try {
+          await peerConnectionRef.current.addIceCandidate(
+            new RTCIceCandidate(candidate)
+          );
+        } catch (err) {
+          console.warn('ICE candidate error:', err);
+        }
       }
     });
 
@@ -70,26 +94,27 @@ export default function VideoCall({
       socket.off("iceCandidate");
       socket.off("callRejected");
       socket.off("callEnded");
-      endCall();
+      cleanup();
     };
   }, []);
 
-  const startCall = async () => {
+  const startCall = async (servers: RTCIceServer[]) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      }).catch(() => {
-        // Nếu không có camera thì thử audio only
-        return navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-      });
+      // Thử video + audio, fallback audio only
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch {
+        console.warn('Camera không khả dụng, thử audio only...');
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+      }
 
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
 
-      const pc = new RTCPeerConnection(iceServers);
+      const pc = new RTCPeerConnection({ iceServers: servers });
       peerConnectionRef.current = pc;
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -110,32 +135,44 @@ export default function VideoCall({
         }
       };
 
-      if (isIncoming) {
+      pc.onconnectionstatechange = () => {
+        console.log('Connection state:', pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          setCallStatus("connected");
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          setCallStatus("ended");
+          setTimeout(onClose, 1500);
+        }
+      };
+
+      if (isIncoming && incomingSignal) {
         await pc.setRemoteDescription(new RTCSessionDescription(incomingSignal));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit("answerCall", {
-          callerId: contact.id,
-          signal: answer,
-        });
+        socket.emit("answerCall", { callerId: contact.id, signal: answer });
         setCallStatus("connected");
       } else {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit("callUser", {
-          receiverId: contact.id,
-          signal: offer,
-        });
+        socket.emit("callUser", { receiverId: contact.id, signal: offer });
       }
     } catch (err) {
-      console.error("Lỗi camera/mic:", err);
+      console.error("Lỗi khởi tạo cuộc gọi:", err);
+      setCallStatus("ended");
+      setTimeout(onClose, 2000);
     }
   };
 
-  const endCall = () => {
+  const cleanup = () => {
     localStreamRef.current?.getTracks().forEach(track => track.stop());
     peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    localStreamRef.current = null;
+  };
+
+  const endCall = () => {
     socket.emit("endCall", { receiverId: contact.id });
+    cleanup();
     onClose();
   };
 
@@ -167,7 +204,14 @@ export default function VideoCall({
           .find(s => s.track?.kind === "video");
         sender?.replaceTrack(screenTrack);
         if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
-        screenTrack.onended = () => toggleScreenShare();
+        screenTrack.onended = () => {
+          setIsScreenSharing(false);
+          const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+          if (videoTrack) {
+            sender?.replaceTrack(videoTrack);
+            if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+          }
+        };
         setIsScreenSharing(true);
       } catch (err) {
         console.error("Lỗi chia sẻ màn hình:", err);
@@ -189,10 +233,10 @@ export default function VideoCall({
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex-1 relative">
         {callStatus === "connected" ? (
-          <video ref={remoteVideoRef} autoPlay className="w-full h-full object-cover" />
+          <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center">
-            <div className="w-24 h-24 rounded-full bg-[#1F4E79] flex items-center justify-center mb-4">
+            <div className="w-24 h-24 rounded-full bg-[#1F4E79] flex items-center justify-center mb-4 animate-pulse">
               <span className="text-white text-4xl font-bold">
                 {contact.displayName.charAt(0)}
               </span>
@@ -206,50 +250,38 @@ export default function VideoCall({
           </div>
         )}
 
-        <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl">
-          <video ref={localVideoRef} autoPlay muted className="w-full h-full object-cover" />
+        {/* Local video (picture-in-picture) */}
+        <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900">
+          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
         </div>
 
         <div className="absolute top-4 left-4">
-          <p className="text-white font-semibold text-lg">{contact.displayName}</p>
+          <p className="text-white font-semibold text-lg drop-shadow">{contact.displayName}</p>
           {callStatus === "connected" && (
-            <p className="text-green-400 text-sm">Đang kết nối</p>
+            <p className="text-green-400 text-sm">● Đang kết nối</p>
           )}
         </div>
       </div>
 
+      {/* Controls */}
       <div className="bg-black/80 px-8 py-6 flex items-center justify-center gap-6">
-        <button
-          onClick={toggleMute}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-            isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-          }`}
-        >
+        <button onClick={toggleMute}
+          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"}`}>
           {isMuted ? <MicOff className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
         </button>
 
-        <button
-          onClick={endCall}
-          className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
-        >
+        <button onClick={endCall}
+          className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors shadow-lg">
           <PhoneOff className="w-7 h-7 text-white" />
         </button>
 
-        <button
-          onClick={toggleVideo}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-            isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"
-          }`}
-        >
+        <button onClick={toggleVideo}
+          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"}`}>
           {isVideoOff ? <VideoOff className="w-6 h-6 text-white" /> : <Video className="w-6 h-6 text-white" />}
         </button>
 
-        <button
-          onClick={toggleScreenShare}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
-            isScreenSharing ? "bg-blue-500" : "bg-white/20 hover:bg-white/30"
-          }`}
-        >
+        <button onClick={toggleScreenShare}
+          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? "bg-blue-500" : "bg-white/20 hover:bg-white/30"}`}>
           <Monitor className="w-6 h-6 text-white" />
         </button>
       </div>

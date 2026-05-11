@@ -114,7 +114,7 @@ export default function AdminDashboard() {
     refreshInterval.current = setInterval(() => fetchStats(true), 30000);
 
     // Socket để real-time online count
-    const socket = io("http://localhost:3000", {
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
       auth: { token },
       reconnectionDelay: 1000,
     });

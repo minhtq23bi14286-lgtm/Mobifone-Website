@@ -313,7 +313,7 @@ export default function Chat() {
     socketInitialized.current = true;
     const token = localStorage.getItem("accessToken");
     if (!token) return;
-    const socket = io({ auth: { token } });
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', { auth: { token } });
     socketRef.current = socket;
     socket.on("connect", () => socket.emit("getOnlineUsers"));
     socket.on("onlineUsers", (users: number[]) => setOnlineUsers(users));
