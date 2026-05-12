@@ -9,7 +9,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Message } from './message.entity';
 
 
-@WebSocketGateway({ cors: { origin: 'http://localhost:5173', credentials: true } })
+@WebSocketGateway({
+  cors: {
+    origin: ['http://localhost:5173', 'https://mobifone-website.vercel.app'],
+    credentials: true,
+  }
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private connectedUsers = new Map<number, string>();
