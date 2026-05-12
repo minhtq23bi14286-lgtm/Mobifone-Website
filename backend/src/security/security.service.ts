@@ -80,14 +80,14 @@ export class SecurityService {
     const results = await this.loginHistoryRepo
       .createQueryBuilder('lh')
       .select('lh.ipAddress', 'ip')
-      .addSelect('COUNT(*)', 'failCount')
-      .addSelect('MAX(lh.createdAt)', 'lastAttempt')
+      .addSelect('COUNT(*)', 'fail_count')
+      .addSelect('MAX(lh.createdAt)', 'last_attempt')
       .where('lh.status = :status', { status: 'failed' })
       .andWhere('lh.createdAt > :since', { since: blockWindow })
       .andWhere('lh.ipAddress IS NOT NULL')
       .groupBy('lh.ipAddress')
       .having('COUNT(*) >= 3')
-      .orderBy('failCount', 'DESC')
+      .orderBy('fail_count', 'DESC')
       .getRawMany();
     return results;
   }
