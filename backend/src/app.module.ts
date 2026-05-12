@@ -13,15 +13,28 @@ import { AdminModule } from './admin/admin.module';
 import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      url: process.env.DATABASE_URL,
+      ...(isProduction
+        ? {
+            url: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false },
+          }
+        : {
+            host: 'localhost',
+            port: 5432,
+            username: 'postgres',
+            password: 'Tranminh999!@#',
+            database: 'mobifone_db',
+          }
+      ),
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: true,
-      ssl: { rejectUnauthorized: false },
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
