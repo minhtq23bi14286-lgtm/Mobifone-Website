@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search, Phone, Video, Info, Send, Paperclip, Smile,
-  MoreHorizontal, Check, CheckCheck, X, Reply, File, Trash2
+  MoreHorizontal, Check, CheckCheck, X, Reply, File, Trash2,
+  ArrowLeft, Users,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import VideoCall from "../components/VideoCall";
@@ -9,45 +10,16 @@ import VideoCall from "../components/VideoCall";
 const GIPHY_API_KEY = "LcDK349I5nP9QQbiMb6kFChTbFMJzJkU";
 
 interface Contact {
-  id: number;
-  email: string;
-  displayName: string;
-  role: string;
-  department: string;
+  id: number; email: string; displayName: string; role: string; department: string;
 }
-
-interface ReplyTo {
-  id: number;
-  content: string;
-  senderId: number;
-}
-
+interface ReplyTo { id: number; content: string; senderId: number; }
 interface Message {
-  id: number;
-  senderId: number;
-  receiverId: number;
-  content: string;
-  createdAt: string;
-  mine: boolean;
-  isRead?: boolean;
-  replyToId?: number;
-  replyTo?: ReplyTo;
-  fileUrl?: string;
-  fileName?: string;
-  fileType?: string;
-  reactions?: Record<string, string>;
+  id: number; senderId: number; receiverId: number; content: string; createdAt: string;
+  mine: boolean; isRead?: boolean; replyToId?: number; replyTo?: ReplyTo;
+  fileUrl?: string; fileName?: string; fileType?: string; reactions?: Record<string, string>;
 }
-
-interface LastMessageInfo {
-  lastMessage: Message | null;
-  unreadCount: number;
-}
-
-interface GiphyResult {
-  id: string;
-  images: { fixed_height_small: { url: string }; original: { url: string } };
-  title: string;
-}
+interface LastMessageInfo { lastMessage: Message | null; unreadCount: number; }
+interface GiphyResult { id: string; images: { fixed_height_small: { url: string }; original: { url: string } }; title: string; }
 
 const EMOJIS = ["😀","😂","❤️","👍","👎","😮","😢","😡","🔥","🎉","👏","🙏"];
 const REACTION_EMOJIS = ["❤️","😂","😮","😢","😡","👍"];
@@ -57,8 +29,7 @@ const formatTime = (dateStr: string) =>
 
 const formatLastTime = (dateStr: string) => {
   const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  const diff = Date.now() - date.getTime();
   if (diff < 60000) return "Vừa xong";
   if (diff < 3600000) return `${Math.floor(diff / 60000)} phút`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} giờ`;
@@ -68,24 +39,21 @@ const formatLastTime = (dateStr: string) => {
 function MessageBubble({ msg, prevMsg, nextMsg, currentUserId, activeContact, onReact, onReply }: {
   msg: Message; prevMsg?: Message; nextMsg?: Message;
   currentUserId: number; activeContact: Contact | null;
-  onReact: (id: number, emoji: string) => void;
-  onReply: (msg: Message) => void;
+  onReact: (id: number, emoji: string) => void; onReply: (msg: Message) => void;
 }) {
   const [showReactions, setShowReactions] = useState(false);
   const isSamePrev = prevMsg?.senderId === msg.senderId;
   const isSameNext = nextMsg?.senderId === msg.senderId;
   const showAvatar = !msg.mine && !isSameNext;
-
   const reactionSummary: Record<string, number> = {};
   if (msg.reactions) Object.values(msg.reactions).forEach(e => { reactionSummary[e] = (reactionSummary[e] || 0) + 1; });
   const hasReactions = Object.keys(reactionSummary).length > 0;
   const myReaction = msg.reactions?.[currentUserId];
-
   const isGif = msg.fileType === "gif";
 
   return (
     <div className={`flex ${msg.mine ? "justify-end" : "justify-start"} ${isSamePrev ? "mt-0.5" : "mt-3"}`}>
-      <div className={`flex items-end gap-2 max-w-[70%] group ${msg.mine ? "flex-row-reverse" : ""}`}>
+      <div className={`flex items-end gap-2 max-w-[80%] sm:max-w-[70%] group ${msg.mine ? "flex-row-reverse" : ""}`}>
         <div className="w-8 flex-shrink-0 self-end">
           {showAvatar && (
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white text-xs font-bold">
@@ -106,12 +74,11 @@ function MessageBubble({ msg, prevMsg, nextMsg, currentUserId, activeContact, on
           {showReactions && (
             <div className={`absolute bottom-full mb-2 z-20 bg-white rounded-full shadow-xl border border-gray-100 px-2 py-1.5 flex gap-1 ${msg.mine ? "right-0" : "left-0"}`}>
               {REACTION_EMOJIS.map(emoji => (
-                <button key={emoji} onClick={() => { onReact(msg.id, emoji); setShowReactions(false); }} className={`text-lg hover:scale-125 transition-transform ${myReaction === emoji ? "scale-125" : ""}`}>{emoji}</button>
+                <button key={emoji} onClick={() => { onReact(msg.id, emoji); setShowReactions(false); }}
+                  className={`text-lg hover:scale-125 transition-transform ${myReaction === emoji ? "scale-125" : ""}`}>{emoji}</button>
               ))}
             </div>
           )}
-
-          {/* GIF message */}
           {isGif ? (
             <div className={`rounded-2xl overflow-hidden ${msg.mine ? "rounded-br-sm" : "rounded-bl-sm"}`}>
               <img src={msg.fileUrl} alt="GIF" className="max-w-xs max-h-48 object-cover" />
@@ -128,14 +95,14 @@ function MessageBubble({ msg, prevMsg, nextMsg, currentUserId, activeContact, on
                 </a>
               )}
               {msg.fileUrl && msg.fileType === "file" && (
-                <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 mb-1 text-xs underline ${msg.mine ? "text-blue-200" : "text-[#1F4E79]"}`}>
+                <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer"
+                  className={`flex items-center gap-2 mb-1 text-xs underline ${msg.mine ? "text-blue-200" : "text-[#1F4E79]"}`}>
                   <File className="w-4 h-4" />{msg.fileName}
                 </a>
               )}
               {msg.content && <span>{msg.content}</span>}
             </div>
           )}
-
           {hasReactions && (
             <div className={`flex mt-1 ${msg.mine ? "justify-end" : "justify-start"}`}>
               <div className="bg-white rounded-full shadow-sm px-1.5 py-0.5 flex items-center gap-0.5 text-xs border border-gray-100">
@@ -155,18 +122,13 @@ function MessageBubble({ msg, prevMsg, nextMsg, currentUserId, activeContact, on
   );
 }
 
-// ── GIPHY Picker ──────────────────────────────────────────────────────────────
 function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [gifs, setGifs] = useState<GiphyResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load trending khi mở
-  useEffect(() => {
-    inputRef.current?.focus();
-    fetchTrending();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); fetchTrending(); }, []);
 
   const fetchTrending = async () => {
     setLoading(true);
@@ -174,8 +136,7 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
       const res = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=18&rating=g`);
       const data = await res.json();
       setGifs(data.data || []);
-    } catch { console.error("Lỗi tải GIF"); }
-    finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   };
 
   const searchGifs = async (q: string) => {
@@ -185,11 +146,9 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
       const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(q)}&limit=18&rating=g`);
       const data = await res.json();
       setGifs(data.data || []);
-    } catch { console.error("Lỗi tìm GIF"); }
-    finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   };
 
-  // Debounce search
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearch = (val: string) => {
     setQuery(val);
@@ -198,8 +157,7 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
   };
 
   return (
-    <div className="absolute bottom-full right-0 mb-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-30">
-      {/* Header */}
+    <div className="absolute bottom-full right-0 mb-2 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-30">
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-gray-800">GIF</span>
@@ -207,30 +165,19 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
         </div>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg transition-colors text-gray-400"><X className="w-4 h-4" /></button>
       </div>
-
-      {/* Search */}
       <div className="px-3 py-2 border-b border-gray-100">
         <div className="relative">
           <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-400" />
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Tìm GIF..."
-            value={query}
+          <input ref={inputRef} type="text" placeholder="Tìm GIF..." value={query}
             onChange={e => handleSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors"
-          />
+            className="w-full pl-8 pr-3 py-1.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors" />
         </div>
       </div>
-
-      {/* Label */}
       <div className="px-3 pt-2 pb-1">
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
           {query ? "Kết quả tìm kiếm" : "Đang thịnh hành"}
         </p>
       </div>
-
-      {/* GIF Grid */}
       <div className="h-56 overflow-y-auto px-2 pb-2">
         {loading ? (
           <div className="flex items-center justify-center h-full">
@@ -241,25 +188,14 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
         ) : (
           <div className="grid grid-cols-3 gap-1">
             {gifs.map(gif => (
-              <button
-                key={gif.id}
-                onClick={() => { onSelect(gif.images.original.url); onClose(); }}
-                className="relative aspect-square rounded-lg overflow-hidden hover:opacity-80 transition-opacity group"
-              >
-                <img
-                  src={gif.images.fixed_height_small.url}
-                  alt={gif.title}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              <button key={gif.id} onClick={() => { onSelect(gif.images.original.url); onClose(); }}
+                className="relative aspect-square rounded-lg overflow-hidden hover:opacity-80 transition-opacity group">
+                <img src={gif.images.fixed_height_small.url} alt={gif.title} className="w-full h-full object-cover" loading="lazy" />
               </button>
             ))}
           </div>
         )}
       </div>
-
-      {/* Footer GIPHY branding */}
       <div className="px-3 py-1.5 border-t border-gray-100 flex justify-end">
         <span className="text-[10px] text-gray-300 font-medium">Powered by GIPHY</span>
       </div>
@@ -267,7 +203,6 @@ function GiphyPicker({ onSelect, onClose }: { onSelect: (url: string) => void; o
   );
 }
 
-// ── Main Chat ─────────────────────────────────────────────────────────────────
 export default function Chat() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
@@ -284,6 +219,7 @@ export default function Chat() {
   const [lastMessages, setLastMessages] = useState<Record<number, LastMessageInfo>>({});
   const [uploadingFile, setUploadingFile] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string; signal: any } | null>(null);
+  const [showContactList, setShowContactList] = useState(true); // mobile: toggle contact list
 
   const socketRef = useRef<Socket | null>(null);
   const socketInitialized = useRef(false);
@@ -362,19 +298,10 @@ export default function Chat() {
     socketRef.current.emit("typing", { receiverId: activeContact.id, isTyping: false });
   }, [message, activeContact, replyingTo]);
 
-  // Gửi GIF
   const handleSendGif = useCallback((gifUrl: string) => {
     if (!socketRef.current || !activeContact) return;
-    socketRef.current.emit("sendMessage", {
-      receiverId: activeContact.id,
-      content: "",
-      fileUrl: gifUrl,
-      fileName: "giphy.gif",
-      fileType: "gif",
-      replyToId: replyingTo?.id,
-    });
-    setReplyingTo(null);
-    setShowGifPicker(false);
+    socketRef.current.emit("sendMessage", { receiverId: activeContact.id, content: "", fileUrl: gifUrl, fileName: "giphy.gif", fileType: "gif", replyToId: replyingTo?.id });
+    setReplyingTo(null); setShowGifPicker(false);
   }, [activeContact, replyingTo]);
 
   const handleTyping = (value: string) => {
@@ -418,19 +345,86 @@ export default function Chat() {
     } catch (err) { console.error(err); }
   };
 
+  const handleSelectContact = (contact: Contact) => {
+    setActiveContact(contact);
+    setShowContactList(false); // mobile: ẩn contact list, hiện chat
+  };
+
   const filteredContacts = contacts.filter(c => c.displayName.toLowerCase().includes(search.toLowerCase()));
+
+  // Mobile: tính tổng unread
+  const totalUnread = Object.values(lastMessages).reduce((sum, info) => sum + (info.unreadCount || 0), 0);
 
   return (
     <div className="flex flex-1 h-full bg-white overflow-hidden">
 
-      {/* Chat area (trái) */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Contact list — desktop: always show | mobile: toggle */}
+      <div className={`
+        flex-col bg-white border-r border-gray-100
+        w-full sm:w-72 sm:flex sm:flex-shrink-0
+        ${showContactList ? "flex" : "hidden sm:flex"}
+      `}>
+        <div className="px-4 pt-5 pb-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-bold text-gray-800">Tin nhắn</h2>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input type="text" placeholder="Tìm kiếm..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors" />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {filteredContacts.map(contact => {
+            const info = lastMessages[contact.id];
+            const unread = info?.unreadCount || 0;
+            const last = info?.lastMessage;
+            const isActive = activeContact?.id === contact.id;
+            return (
+              <button key={contact.id} onClick={() => handleSelectContact(contact)}
+                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group relative ${isActive ? "bg-blue-50" : ""}`}>
+                <div className="relative flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white font-bold text-sm">
+                    {contact.displayName.charAt(0)}
+                  </div>
+                  {onlineUsers.includes(contact.id) && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm font-semibold truncate ${isActive ? "text-[#1F4E79]" : "text-gray-800"}`}>{contact.displayName}</p>
+                    {last?.createdAt && <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{formatLastTime(last.createdAt)}</span>}
+                  </div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <p className={`text-xs truncate ${unread > 0 ? "text-gray-800 font-semibold" : "text-gray-500"}`}>
+                      {last ? (last.senderId === currentUser.id ? "Bạn: " : "") + (last.fileType === "gif" ? "🎬 GIF" : last.fileType === "image" ? "📷 Hình ảnh" : last.fileType === "file" ? "📎 File" : last.content || "") : contact.department}
+                    </p>
+                    {unread > 0 && <span className="ml-1 min-w-[18px] h-[18px] bg-[#1F4E79] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">{unread > 99 ? "99+" : unread}</span>}
+                  </div>
+                </div>
+                {isActive && (
+                  <div role="button" onClick={e => { e.stopPropagation(); handleDeleteHistory(contact.id, contact.displayName); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded-lg transition-all text-gray-400 hover:text-red-500 cursor-pointer">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Chat area */}
+      <div className={`flex-1 flex flex-col min-w-0 ${showContactList ? "hidden sm:flex" : "flex"}`}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-white">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-white">
           {activeContact ? (
             <>
               <div className="flex items-center gap-3">
+                {/* Mobile back button */}
+                <button onClick={() => setShowContactList(true)} className="sm:hidden p-1.5 -ml-1 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
                 <div className="relative">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white font-bold">
                     {activeContact.displayName.charAt(0)}
@@ -438,14 +432,19 @@ export default function Chat() {
                   {onlineUsers.includes(activeContact.id) && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">{activeContact.displayName}</p>
+                  <p className="font-semibold text-gray-800 text-sm">{activeContact.displayName}</p>
                   <p className="text-xs text-green-500">{isTyping ? "Đang nhập..." : onlineUsers.includes(activeContact.id) ? "Đang hoạt động" : "Ngoại tuyến"}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {/* Mobile: show contact list button */}
+                <button onClick={() => setShowContactList(true)} className="sm:hidden relative p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]">
+                  <Users className="w-5 h-5" />
+                  {totalUnread > 0 && <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center font-bold">{totalUnread}</span>}
+                </button>
                 <button className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]"><Phone className="w-5 h-5" /></button>
                 <button onClick={() => setShowVideoCall(true)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]"><Video className="w-5 h-5" /></button>
-                <button className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]"><Info className="w-5 h-5" /></button>
+                <button className="hidden sm:block p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]"><Info className="w-5 h-5" /></button>
                 <button className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400"><MoreHorizontal className="w-5 h-5" /></button>
               </div>
             </>
@@ -453,7 +452,7 @@ export default function Chat() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-scroll custom-scrollbar px-5 py-4 bg-gray-50">
+        <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50">
           {messages.length === 0 && !isTyping && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white text-2xl font-bold">
@@ -486,7 +485,7 @@ export default function Chat() {
 
         {/* Reply bar */}
         {replyingTo && (
-          <div className="px-5 py-2 bg-blue-50 border-t border-blue-100 flex items-center gap-3">
+          <div className="px-4 py-2 bg-blue-50 border-t border-blue-100 flex items-center gap-3">
             <Reply className="w-4 h-4 text-[#1F4E79] flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-[#1F4E79]">{replyingTo.senderId === currentUser.id ? "Bạn" : activeContact?.displayName}</p>
@@ -497,43 +496,26 @@ export default function Chat() {
         )}
 
         {/* Input */}
-        <div className="px-5 py-3.5 bg-white border-t border-gray-100">
+        <div className="px-4 py-3 bg-white border-t border-gray-100">
           <div className="flex items-center gap-2">
-            {/* File upload */}
             <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}
               className="p-2 text-gray-400 hover:text-[#1F4E79] hover:bg-gray-100 rounded-xl transition-colors flex-shrink-0">
               {uploadingFile ? <div className="w-5 h-5 border-2 border-[#1F4E79] border-t-transparent rounded-full animate-spin" /> : <Paperclip className="w-5 h-5" />}
             </button>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
-
             <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-2xl px-4 py-2.5">
               <input ref={inputRef} type="text" placeholder="Aa" value={message}
                 onChange={e => handleTyping(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
-                className="flex-1 bg-transparent text-sm focus:outline-none text-gray-800 placeholder-gray-400" />
-
-              <div className="flex items-center gap-1">
-                {/* GIF Button */}
+                className="flex-1 bg-transparent text-sm focus:outline-none text-gray-800 placeholder-gray-400 min-w-0" />
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <div className="relative">
-                  <button
-                    onClick={() => { setShowGifPicker(v => !v); setShowEmojiPicker(false); }}
-                    className={`px-1.5 py-0.5 rounded-md text-[11px] font-bold transition-colors border ${
-                      showGifPicker
-                        ? "bg-[#1F4E79] text-white border-[#1F4E79]"
-                        : "text-gray-400 border-gray-300 hover:border-[#1F4E79] hover:text-[#1F4E79]"
-                    }`}
-                  >
+                  <button onClick={() => { setShowGifPicker(v => !v); setShowEmojiPicker(false); }}
+                    className={`px-1.5 py-0.5 rounded-md text-[11px] font-bold transition-colors border ${showGifPicker ? "bg-[#1F4E79] text-white border-[#1F4E79]" : "text-gray-400 border-gray-300 hover:border-[#1F4E79] hover:text-[#1F4E79]"}`}>
                     GIF
                   </button>
-                  {showGifPicker && (
-                    <GiphyPicker
-                      onSelect={handleSendGif}
-                      onClose={() => setShowGifPicker(false)}
-                    />
-                  )}
+                  {showGifPicker && <GiphyPicker onSelect={handleSendGif} onClose={() => setShowGifPicker(false)} />}
                 </div>
-
-                {/* Emoji Button */}
                 <div className="relative">
                   <button onClick={() => { setShowEmojiPicker(v => !v); setShowGifPicker(false); }}
                     className={`transition-colors ${showEmojiPicker ? "text-[#1F4E79]" : "text-gray-400 hover:text-[#1F4E79]"}`}>
@@ -550,8 +532,6 @@ export default function Chat() {
                 </div>
               </div>
             </div>
-
-            {/* Send / Like */}
             {message.trim()
               ? <button onClick={handleSend} className="w-9 h-9 bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] rounded-full flex items-center justify-center hover:opacity-90 transition-all flex-shrink-0 shadow-md"><Send className="w-4 h-4 text-white" /></button>
               : <button onClick={() => socketRef.current?.emit("sendMessage", { receiverId: activeContact?.id, content: "👍" })} className="text-2xl hover:scale-110 transition-transform flex-shrink-0">👍</button>
@@ -560,63 +540,10 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* ── Contact list (phải) ── */}
-      <div className="w-72 flex-shrink-0 border-l border-gray-100 flex flex-col bg-white">
-        <div className="px-4 pt-5 pb-3">
-          <h2 className="text-xl font-bold text-gray-800 mb-3">Tin nhắn</h2>
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Tìm kiếm..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors" />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-scroll custom-scrollbar">
-          {filteredContacts.map(contact => {
-            const info = lastMessages[contact.id];
-            const unread = info?.unreadCount || 0;
-            const last = info?.lastMessage;
-            const isActive = activeContact?.id === contact.id;
-            return (
-              <button key={contact.id} onClick={() => setActiveContact(contact)}
-                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group relative ${isActive ? "bg-blue-50" : ""}`}>
-                <div className="relative flex-shrink-0">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white font-bold text-sm">
-                    {contact.displayName.charAt(0)}
-                  </div>
-                  {onlineUsers.includes(contact.id) && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />}
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-center justify-between">
-                    <p className={`text-sm font-semibold truncate ${isActive ? "text-[#1F4E79]" : "text-gray-800"}`}>{contact.displayName}</p>
-                    {last?.createdAt && <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{formatLastTime(last.createdAt)}</span>}
-                  </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <p className={`text-xs truncate ${unread > 0 ? "text-gray-800 font-semibold" : "text-gray-500"}`}>
-                      {last
-                        ? (last.senderId === currentUser.id ? "Bạn: " : "") +
-                          (last.fileType === "gif" ? "🎬 GIF" : last.fileType === "image" ? "📷 Hình ảnh" : last.fileType === "file" ? "📎 File" : last.content || "")
-                        : contact.department}
-                    </p>
-                    {unread > 0 && <span className="ml-1 min-w-[18px] h-[18px] bg-[#1F4E79] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">{unread > 99 ? "99+" : unread}</span>}
-                  </div>
-                </div>
-                {isActive && (
-                  <div role="button"
-                    onClick={e => { e.stopPropagation(); handleDeleteHistory(contact.id, contact.displayName); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded-lg transition-all text-gray-400 hover:text-red-500 cursor-pointer">
-                    <Trash2 className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Incoming call ── */}
+      {/* Incoming call */}
       {incomingCall && !showVideoCall && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-8 w-80 text-center shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-8 w-80 max-w-full text-center shadow-2xl">
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center mx-auto mb-4 animate-pulse">
               <span className="text-white text-3xl font-bold">{incomingCall.callerName.charAt(0)}</span>
             </div>
@@ -641,7 +568,6 @@ export default function Chat() {
         </div>
       )}
 
-      {/* ── Video call ── */}
       {showVideoCall && activeContact && socketRef.current && (
         <VideoCall socket={socketRef.current} currentUser={currentUser}
           contact={incomingCall ? { id: incomingCall.callerId, displayName: incomingCall.callerName } : activeContact}

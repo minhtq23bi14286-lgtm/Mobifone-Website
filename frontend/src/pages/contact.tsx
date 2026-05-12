@@ -9,31 +9,17 @@ type RequestType = "feedback" | "help" | "report" | "other";
 type Priority = "low" | "medium" | "high";
 type RequestStatus = "pending" | "reviewing" | "resolved" | "closed";
 
-interface ContactForm {
-  type: RequestType;
-  subject: string;
-  priority: Priority;
-  content: string;
-}
-
+interface ContactForm { type: RequestType; subject: string; priority: Priority; content: string; }
 interface ContactRequest {
-  id: number;
-  type: RequestType;
-  subject: string;
-  priority: Priority;
-  content: string;
-  status: RequestStatus;
-  adminReply?: string;
-  repliedBy?: string;
-  repliedAt?: string;
-  createdAt: string;
+  id: number; type: RequestType; subject: string; priority: Priority; content: string;
+  status: RequestStatus; adminReply?: string; repliedBy?: string; repliedAt?: string; createdAt: string;
 }
 
 const REQUEST_TYPES: { value: RequestType; label: string; icon: any; desc: string; color: string }[] = [
-  { value: "feedback", label: "Phản hồi",  icon: MessageSquare, desc: "Ý kiến đóng góp",       color: "from-blue-500 to-[#1F4E79]" },
-  { value: "help",     label: "Trợ giúp",  icon: HelpCircle,    desc: "Cần hỗ trợ kỹ thuật",   color: "from-emerald-500 to-teal-600" },
-  { value: "report",   label: "Báo cáo",   icon: AlertCircle,   desc: "Báo lỗi hoặc vấn đề",   color: "from-orange-500 to-red-500" },
-  { value: "other",    label: "Khác",      icon: FileText,      desc: "Nội dung khác",          color: "from-purple-500 to-violet-600" },
+  { value: "feedback", label: "Phản hồi",  icon: MessageSquare, desc: "Ý kiến đóng góp",     color: "from-blue-500 to-[#1F4E79]" },
+  { value: "help",     label: "Trợ giúp",  icon: HelpCircle,    desc: "Cần hỗ trợ kỹ thuật", color: "from-emerald-500 to-teal-600" },
+  { value: "report",   label: "Báo cáo",   icon: AlertCircle,   desc: "Báo lỗi hoặc vấn đề", color: "from-orange-500 to-red-500" },
+  { value: "other",    label: "Khác",      icon: FileText,      desc: "Nội dung khác",        color: "from-purple-500 to-violet-600" },
 ];
 
 const PRIORITIES: { value: Priority; label: string; color: string; bg: string }[] = [
@@ -43,10 +29,10 @@ const PRIORITIES: { value: Priority; label: string; color: string; bg: string }[
 ];
 
 const STATUS_MAP: Record<RequestStatus, { label: string; color: string; icon: any }> = {
-  pending:   { label: "Chờ xử lý",  color: "bg-yellow-50 text-yellow-600 border-yellow-200", icon: Clock },
-  reviewing: { label: "Đang xem",   color: "bg-blue-50 text-blue-600 border-blue-200",       icon: RefreshCw },
-  resolved:  { label: "Đã giải quyết", color: "bg-green-50 text-green-600 border-green-200", icon: CheckCircle },
-  closed:    { label: "Đã đóng",    color: "bg-gray-100 text-gray-500 border-gray-200",      icon: X },
+  pending:   { label: "Chờ xử lý",     color: "bg-yellow-50 text-yellow-600 border-yellow-200", icon: Clock },
+  reviewing: { label: "Đang xem",      color: "bg-blue-50 text-blue-600 border-blue-200",       icon: RefreshCw },
+  resolved:  { label: "Đã giải quyết", color: "bg-green-50 text-green-600 border-green-200",    icon: CheckCircle },
+  closed:    { label: "Đã đóng",       color: "bg-gray-100 text-gray-500 border-gray-200",      icon: X },
 };
 
 const SUBJECT_SUGGESTIONS: Record<RequestType, string[]> = {
@@ -76,9 +62,7 @@ export default function Contact() {
   const fetchRequests = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const res = await fetch("/api/contact-requests/my", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch("/api/contact-requests/my", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       setRequests(await res.json());
     } catch (err) { console.error(err); }
@@ -117,20 +101,14 @@ export default function Contact() {
     if (!confirm("Bạn có chắc muốn xóa yêu cầu này?")) return;
     try {
       const token = localStorage.getItem("accessToken");
-      await fetch(`/api/contact-requests/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await fetch(`/api/contact-requests/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       fetchRequests();
     } catch (err) { console.error(err); }
   };
 
   const handleClear = () => {
-    if (form.subject || form.content) {
-      if (!confirm("Bạn có chắc muốn xóa nội dung đang soạn?")) return;
-    }
-    setForm(EMPTY_FORM);
-    setErrors({});
+    if (form.subject || form.content) if (!confirm("Bạn có chắc muốn xóa nội dung đang soạn?")) return;
+    setForm(EMPTY_FORM); setErrors({});
   };
 
   const selectedType = REQUEST_TYPES.find(t => t.value === form.type)!;
@@ -146,23 +124,21 @@ export default function Contact() {
 
   return (
     <div className={`h-full flex flex-col overflow-y-auto ${bg}`}>
-      <div className="max-w-5xl mx-auto w-full px-6 py-8 space-y-6">
+      <div className="max-w-5xl mx-auto w-full px-4 md:px-6 py-6 md:py-8 space-y-5 md:space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className={`text-2xl font-bold ${textMain}`}>Liên hệ & Hỗ trợ</h1>
+            <h1 className={`text-xl md:text-2xl font-bold ${textMain}`}>Liên hệ & Hỗ trợ</h1>
             <p className={`text-sm mt-1 ${textSub}`}>Gửi phản hồi, báo lỗi hoặc yêu cầu hỗ trợ đến quản trị viên</p>
           </div>
-          <div className={`flex items-center gap-1 p-1 rounded-xl border ${card}`}>
+          <div className={`flex items-center gap-1 p-1 rounded-xl border ${card} self-start sm:self-auto`}>
             {[
               { value: "form", label: "Soạn yêu cầu" },
               { value: "history", label: `Lịch sử (${requests.length})` },
             ].map(tab => (
               <button key={tab.value} onClick={() => setActiveTab(tab.value as any)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === tab.value ? "bg-[#1F4E79] text-white shadow-sm" : `${textSub} ${hoverBg}`
-                }`}>
+                className={`px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.value ? "bg-[#1F4E79] text-white shadow-sm" : `${textSub} ${hoverBg}`}`}>
                 {tab.label}
               </button>
             ))}
@@ -171,32 +147,24 @@ export default function Contact() {
 
         {/* Toast */}
         {showSuccess && (
-          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${
-            showSuccess.includes("Lỗi")
-              ? "bg-red-50 border-red-200 text-red-700"
-              : "bg-green-50 border-green-200 text-green-700"
-          }`}>
+          <div className={`flex items-center gap-3 p-4 rounded-2xl border ${showSuccess.includes("Lỗi") ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"}`}>
             <CheckCircle className="w-5 h-5 flex-shrink-0" />
             <p className="text-sm font-medium">{showSuccess}</p>
           </div>
         )}
 
-        {/* ── Form Tab ── */}
+        {/* Form Tab */}
         {activeTab === "form" && (
-          <div className="grid grid-cols-3 gap-6">
-            <div className={`col-span-2 rounded-2xl border p-6 space-y-5 ${card}`}>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
+            <div className={`lg:col-span-2 rounded-2xl border p-4 md:p-6 space-y-5 ${card}`}>
 
               {/* Loại */}
               <div>
                 <label className={`block text-sm font-semibold mb-3 ${textMain}`}>Loại yêu cầu</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {REQUEST_TYPES.map(type => (
                     <button key={type.value} onClick={() => setForm(f => ({ ...f, type: type.value }))}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                        form.type === type.value
-                          ? "border-[#1F4E79] bg-blue-50"
-                          : darkMode ? "border-[#2a3a5c] hover:border-[#3a4a6c]" : "border-gray-100 hover:border-gray-200"
-                      }`}>
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${form.type === type.value ? "border-[#1F4E79] bg-blue-50" : darkMode ? "border-[#2a3a5c] hover:border-[#3a4a6c]" : "border-gray-100 hover:border-gray-200"}`}>
                       <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${type.color} flex items-center justify-center`}>
                         <type.icon className="w-4 h-4 text-white" />
                       </div>
@@ -233,9 +201,7 @@ export default function Contact() {
                 <div className="flex gap-2">
                   {PRIORITIES.map(p => (
                     <button key={p.value} onClick={() => setForm(f => ({ ...f, priority: p.value }))}
-                      className={`flex-1 py-2 rounded-xl border text-sm font-medium transition-all ${
-                        form.priority === p.value ? `${p.bg} ${p.color} border-current` : darkMode ? "border-[#2a3a5c] text-gray-400" : "border-gray-200 text-gray-500 hover:border-gray-300"
-                      }`}>{p.label}</button>
+                      className={`flex-1 py-2 rounded-xl border text-sm font-medium transition-all ${form.priority === p.value ? `${p.bg} ${p.color} border-current` : darkMode ? "border-[#2a3a5c] text-gray-400" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>{p.label}</button>
                   ))}
                 </div>
               </div>
@@ -245,7 +211,7 @@ export default function Contact() {
                 <label className={`block text-sm font-semibold mb-1.5 ${textMain}`}>Nội dung *</label>
                 <textarea placeholder="Mô tả chi tiết vấn đề hoặc yêu cầu của bạn..." value={form.content}
                   onChange={e => { setForm(f => ({ ...f, content: e.target.value })); setErrors(e2 => ({ ...e2, content: undefined })); }}
-                  rows={8}
+                  rows={6}
                   className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-[#1F4E79] transition-colors resize-none ${inputBg} ${errors.content ? "border-red-400" : ""}`} />
                 <div className="flex items-center justify-between mt-1">
                   {errors.content ? <p className="text-red-500 text-xs">{errors.content}</p> : <span className={`text-xs ${textSub}`}>Mô tả càng chi tiết, admin sẽ hỗ trợ bạn nhanh hơn</span>}
@@ -256,21 +222,17 @@ export default function Contact() {
               {/* Actions */}
               <div className={`flex items-center justify-between pt-4 border-t ${divider}`}>
                 <button onClick={handleClear}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                    darkMode ? "border-[#2a3a5c] text-gray-400 hover:bg-white/5" : "border-gray-200 text-gray-500 hover:bg-gray-50"
-                  }`}>
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${darkMode ? "border-[#2a3a5c] text-gray-400 hover:bg-white/5" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
                   <X className="w-4 h-4" /> Xóa bỏ
                 </button>
                 <button onClick={handleSend} disabled={isLoading}
                   className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-[#1F4E79] to-[#2E75B6] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-md disabled:opacity-50">
-                  {isLoading
-                    ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Đang gửi...</>
-                    : <><Send className="w-4 h-4" /> Gửi ngay</>}
+                  {isLoading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Đang gửi...</> : <><Send className="w-4 h-4" /> Gửi ngay</>}
                 </button>
               </div>
             </div>
 
-            {/* Sidebar */}
+            {/* Sidebar info */}
             <div className="space-y-4">
               <div className={`rounded-2xl border p-5 space-y-4 ${card}`}>
                 <h3 className={`font-bold text-sm ${textMain}`}>Thông tin người gửi</h3>
@@ -293,9 +255,7 @@ export default function Contact() {
                     <selectedType.icon className="w-3.5 h-3.5 text-white" />
                   </div>
                   <span className={`text-xs font-medium ${textMain}`}>{selectedType.label}</span>
-                  <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full border ${selectedPriority.bg} ${selectedPriority.color}`}>
-                    {selectedPriority.label}
-                  </span>
+                  <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full border ${selectedPriority.bg} ${selectedPriority.color}`}>{selectedPriority.label}</span>
                 </div>
                 {form.subject && <p className={`text-sm font-semibold ${textMain}`}>{form.subject}</p>}
                 {form.content && <p className={`text-xs leading-relaxed line-clamp-4 ${textSub}`}>{form.content}</p>}
@@ -304,7 +264,7 @@ export default function Contact() {
 
               <div className={`rounded-2xl border p-5 space-y-2 ${card}`}>
                 <h3 className={`font-bold text-sm ${textMain}`}>Gợi ý</h3>
-                {["Mô tả vấn đề càng rõ ràng càng tốt", "Nêu các bước đã thực hiện trước đó", "Admin sẽ phản hồi trong vòng 24 giờ", "Chọn mức ưu tiên phù hợp với tình huống"].map((tip, i) => (
+                {["Mô tả vấn đề càng rõ ràng càng tốt","Nêu các bước đã thực hiện trước đó","Admin sẽ phản hồi trong vòng 24 giờ","Chọn mức ưu tiên phù hợp với tình huống"].map((tip, i) => (
                   <div key={i} className={`flex items-start gap-2 text-xs ${textSub}`}>
                     <span className="text-[#1F4E79] font-bold flex-shrink-0">{i + 1}.</span>{tip}
                   </div>
@@ -314,7 +274,7 @@ export default function Contact() {
           </div>
         )}
 
-        {/* ── History Tab ── */}
+        {/* History Tab */}
         {activeTab === "history" && (
           <div className="space-y-3">
             {requests.length === 0 && (
@@ -336,7 +296,7 @@ export default function Contact() {
               const status = STATUS_MAP[req.status];
               const StatusIcon = status.icon;
               return (
-                <div key={req.id} className={`rounded-2xl border p-5 transition-all hover:shadow-md ${card}`}>
+                <div key={req.id} className={`rounded-2xl border p-4 md:p-5 transition-all hover:shadow-md ${card}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${type.color} flex items-center justify-center flex-shrink-0 mt-0.5`}>
