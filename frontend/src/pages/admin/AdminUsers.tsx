@@ -26,7 +26,9 @@ const ROLES = ["employee", "manager", "admin"];
 const formatDate = (d: string) =>
   new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-// ── Reusable components (ngoài component để tránh re-render mất focus) ────────
+const Spinner = () => (
+  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+);
 
 const ModalInput = ({
   label, value, onChange, type = "text", placeholder = "", textMain, inputBg
@@ -64,8 +66,6 @@ const ModalSelect = ({
   </div>
 );
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-
 export default function AdminUsers() {
   const { darkMode } = useOutletContext<OutletContext>();
   const [users, setUsers] = useState<User[]>([]);
@@ -90,6 +90,14 @@ export default function AdminUsers() {
   const [copiedMsg, setCopiedMsg] = useState("");
   const [actionMsg, setActionMsg] = useState("");
 
+  // ── Loading states cho từng action ──
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const token = localStorage.getItem("accessToken");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
@@ -105,11 +113,14 @@ export default function AdminUsers() {
   useEffect(() => { fetchUsers(); }, []);
 
   const generatePassword = async () => {
-    const res = await fetch("/api/users/generate-password", { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) {
-      const { password } = await res.json();
-      return password as string;
-    }
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/users/generate-password", { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const { password } = await res.json();
+        return password as string;
+      }
+    } finally { setIsGenerating(false); }
     return "";
   };
 
@@ -136,6 +147,7 @@ export default function AdminUsers() {
 
   const handleCreate = async () => {
     if (!createForm.email || !createForm.displayName || !createForm.password) return;
+    setIsCreating(true);
     try {
       const res = await fetch("/api/users", {
         method: "POST", headers,
@@ -152,10 +164,12 @@ export default function AdminUsers() {
       fetchUsers();
       showMsg(`✅ Tạo tài khoản thành công! Mật khẩu: ${plainPassword}`);
     } catch { showMsg("Lỗi tạo tài khoản"); }
+    finally { setIsCreating(false); }
   };
 
   const handleEdit = async () => {
     if (!showEdit) return;
+    setIsEditing(true);
     try {
       const res = await fetch(`/api/users/${showEdit.id}`, {
         method: "PATCH", headers,
@@ -163,10 +177,12 @@ export default function AdminUsers() {
       });
       if (res.ok) { setShowEdit(null); fetchUsers(); showMsg("✅ Cập nhật thành công!"); }
     } catch { showMsg("Lỗi cập nhật"); }
+    finally { setIsEditing(false); }
   };
 
   const handleResetPassword = async () => {
     if (!showReset) return;
+    setIsResetting(true);
     try {
       const res = await fetch(`/api/users/${showReset.id}/reset-password`, {
         method: "PATCH", headers,
@@ -178,9 +194,11 @@ export default function AdminUsers() {
         showMsg(`✅ Đặt lại mật khẩu thành công! Mật khẩu mới: ${plainPassword}`);
       }
     } catch { showMsg("Lỗi đặt lại mật khẩu"); }
+    finally { setIsResetting(false); }
   };
 
   const handleToggleActive = async (user: User) => {
+    setTogglingId(user.id);
     try {
       const res = await fetch(`/api/users/${user.id}/toggle-active`, { method: "PATCH", headers });
       if (res.ok) {
@@ -188,14 +206,17 @@ export default function AdminUsers() {
         showMsg(`✅ ${user.isActive ? "Đã vô hiệu hóa" : "Đã kích hoạt"} tài khoản ${user.displayName}`);
       }
     } catch { showMsg("Lỗi cập nhật trạng thái"); }
+    finally { setTogglingId(null); }
   };
 
   const handleDelete = async () => {
     if (!showDelete) return;
+    setIsDeleting(true);
     try {
       const res = await fetch(`/api/users/${showDelete.id}`, { method: "DELETE", headers });
       if (res.ok) { setShowDelete(null); fetchUsers(); showMsg(`✅ Đã xóa tài khoản ${showDelete.displayName}`); }
     } catch { showMsg("Lỗi xóa tài khoản"); }
+    finally { setIsDeleting(false); }
   };
 
   const filtered = users.filter(u => {
@@ -208,7 +229,6 @@ export default function AdminUsers() {
     return matchSearch && matchRole && matchStatus;
   });
 
-  // Theme
   const bg = darkMode ? "bg-[#0f1117]" : "bg-gray-100";
   const card = darkMode ? "bg-[#161b27] border-white/5" : "bg-white border-gray-200";
   const textMain = darkMode ? "text-white" : "text-gray-800";
@@ -219,8 +239,6 @@ export default function AdminUsers() {
   const hoverBg = darkMode ? "hover:bg-white/5" : "hover:bg-gray-50";
   const modalBg = darkMode ? "bg-[#161b27] border-white/10" : "bg-white border-gray-200";
   const divider = darkMode ? "border-white/5" : "border-gray-100";
-
-  // Shared props cho ModalInput/ModalSelect
   const modalProps = { textMain, inputBg };
 
   return (
@@ -336,9 +354,12 @@ export default function AdminUsers() {
                         <Key className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => handleToggleActive(user)}
+                        disabled={togglingId === user.id}
                         title={user.isActive ? "Vô hiệu hóa" : "Kích hoạt"}
-                        className={`p-1.5 rounded-lg transition-colors ${user.isActive ? "text-gray-400 hover:text-yellow-500 hover:bg-yellow-50" : "text-gray-400 hover:text-green-500 hover:bg-green-50"}`}>
-                        {user.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${user.isActive ? "text-gray-400 hover:text-yellow-500 hover:bg-yellow-50" : "text-gray-400 hover:text-green-500 hover:bg-green-50"}`}>
+                        {togglingId === user.id
+                          ? <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                          : user.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                       </button>
                       <button onClick={() => setShowDelete(user)}
                         title="Xóa tài khoản" className="p-1.5 rounded-lg transition-colors text-gray-400 hover:text-red-500 hover:bg-red-50">
@@ -364,15 +385,14 @@ export default function AdminUsers() {
                 </div>
                 <h2 className={`font-bold ${textMain}`}>Tạo tài khoản mới</h2>
               </div>
-              <button onClick={() => setShowCreate(false)} className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowCreate(false)} disabled={isCreating}
+                className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
             </div>
             <div className="p-6 space-y-4">
               <ModalInput {...modalProps} label="Họ và tên *" value={createForm.displayName}
                 onChange={v => setCreateForm(f => ({ ...f, displayName: v }))} placeholder="Nguyễn Văn A" />
               <ModalInput {...modalProps} label="Email *" value={createForm.email}
                 onChange={v => setCreateForm(f => ({ ...f, email: v }))} type="email" placeholder="email@mobifone.vn" />
-
-              {/* Password */}
               <div>
                 <label className={`block text-xs font-semibold mb-1.5 ${textMain}`}>Mật khẩu *</label>
                 <div className="flex gap-2">
@@ -385,9 +405,10 @@ export default function AdminUsers() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <button onClick={handleGenerateForCreate}
-                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-[#1F4E79] to-[#2E75B6] text-white text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 flex-shrink-0">
-                    <RefreshCw className="w-3.5 h-3.5" /> Generate
+                  <button onClick={handleGenerateForCreate} disabled={isGenerating}
+                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-[#1F4E79] to-[#2E75B6] text-white text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 flex-shrink-0 disabled:opacity-60">
+                    {isGenerating ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    Generate
                   </button>
                   {createForm.password && (
                     <button onClick={() => copyToClipboard(createForm.password)}
@@ -398,7 +419,6 @@ export default function AdminUsers() {
                 </div>
                 {copiedMsg && <p className="text-xs text-green-500 mt-1">{copiedMsg}</p>}
               </div>
-
               <ModalSelect {...modalProps} label="Vai trò" value={createForm.role}
                 onChange={v => setCreateForm(f => ({ ...f, role: v }))}
                 options={ROLES.map(r => ({ value: r, label: r }))} />
@@ -407,11 +427,11 @@ export default function AdminUsers() {
                 options={DEPARTMENTS.map(d => ({ value: d, label: d }))} />
             </div>
             <div className={`px-6 py-4 border-t flex justify-end gap-2 ${divider}`}>
-              <button onClick={() => setShowCreate(false)}
+              <button onClick={() => setShowCreate(false)} disabled={isCreating}
                 className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${inputBg} ${hoverBg}`}>Hủy</button>
-              <button onClick={handleCreate}
-                className="px-5 py-2 bg-gradient-to-r from-[#1F4E79] to-[#2E75B6] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all">
-                Tạo tài khoản
+              <button onClick={handleCreate} disabled={isCreating}
+                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-[#1F4E79] to-[#2E75B6] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-60">
+                {isCreating ? <><Spinner />Đang tạo...</> : "Tạo tài khoản"}
               </button>
             </div>
           </div>
@@ -429,7 +449,8 @@ export default function AdminUsers() {
                 </div>
                 <h2 className={`font-bold ${textMain}`}>Chỉnh sửa — {showEdit.displayName}</h2>
               </div>
-              <button onClick={() => setShowEdit(null)} className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowEdit(null)} disabled={isEditing}
+                className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
             </div>
             <div className="p-6 space-y-4">
               <ModalInput {...modalProps} label="Họ và tên" value={editForm.displayName}
@@ -442,11 +463,11 @@ export default function AdminUsers() {
                 options={DEPARTMENTS.map(d => ({ value: d, label: d }))} />
             </div>
             <div className={`px-6 py-4 border-t flex justify-end gap-2 ${divider}`}>
-              <button onClick={() => setShowEdit(null)}
+              <button onClick={() => setShowEdit(null)} disabled={isEditing}
                 className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${inputBg} ${hoverBg}`}>Hủy</button>
-              <button onClick={handleEdit}
-                className="px-5 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all">
-                Lưu thay đổi
+              <button onClick={handleEdit} disabled={isEditing}
+                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-purple-500 to-violet-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-60">
+                {isEditing ? <><Spinner />Đang lưu...</> : "Lưu thay đổi"}
               </button>
             </div>
           </div>
@@ -464,7 +485,8 @@ export default function AdminUsers() {
                 </div>
                 <h2 className={`font-bold ${textMain}`}>Đặt lại mật khẩu</h2>
               </div>
-              <button onClick={() => setShowReset(null)} className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowReset(null)} disabled={isResetting}
+                className={`p-1.5 rounded-lg ${hoverBg} ${textSub}`}><X className="w-4 h-4" /></button>
             </div>
             <div className="p-6 space-y-4">
               <div className={`p-3 rounded-xl ${darkMode ? "bg-white/5" : "bg-gray-50"}`}>
@@ -483,9 +505,10 @@ export default function AdminUsers() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <button onClick={handleGenerateForReset}
-                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 flex-shrink-0">
-                    <RefreshCw className="w-3.5 h-3.5" /> Generate
+                  <button onClick={handleGenerateForReset} disabled={isGenerating}
+                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-semibold hover:opacity-90 flex items-center gap-1.5 flex-shrink-0 disabled:opacity-60">
+                    {isGenerating ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    Generate
                   </button>
                   {newPassword && (
                     <button onClick={() => copyToClipboard(newPassword)}
@@ -498,11 +521,11 @@ export default function AdminUsers() {
               </div>
             </div>
             <div className={`px-6 py-4 border-t flex justify-end gap-2 ${divider}`}>
-              <button onClick={() => setShowReset(null)}
+              <button onClick={() => setShowReset(null)} disabled={isResetting}
                 className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${inputBg} ${hoverBg}`}>Hủy</button>
-              <button onClick={handleResetPassword}
-                className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all">
-                Đặt lại mật khẩu
+              <button onClick={handleResetPassword} disabled={isResetting}
+                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-60">
+                {isResetting ? <><Spinner />Đang đặt lại...</> : "Đặt lại mật khẩu"}
               </button>
             </div>
           </div>
@@ -524,11 +547,11 @@ export default function AdminUsers() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowDelete(null)}
+                <button onClick={() => setShowDelete(null)} disabled={isDeleting}
                   className={`flex-1 px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${inputBg} ${hoverBg}`}>Hủy</button>
-                <button onClick={handleDelete}
-                  className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition-colors">
-                  Xác nhận xóa
+                <button onClick={handleDelete} disabled={isDeleting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
+                  {isDeleting ? <><Spinner />Đang xóa...</> : "Xác nhận xóa"}
                 </button>
               </div>
             </div>
