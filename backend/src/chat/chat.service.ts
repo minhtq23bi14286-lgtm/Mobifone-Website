@@ -20,14 +20,8 @@ export class ChatService {
     fileType?: string,
   ): Promise<Message> {
     const message = this.messageRepository.create({
-      senderId,
-      receiverId,
-      content,
-      replyToId,
-      fileUrl,
-      fileName,
-      fileType,
-      reactions: {},
+      senderId, receiverId, content, replyToId,
+      fileUrl, fileName, fileType, reactions: {},
     });
     return this.messageRepository.save(message);
   }
@@ -49,20 +43,14 @@ export class ChatService {
       .createQueryBuilder()
       .update(Message)
       .set({ isRead: true })
-      .where('senderId = :senderId AND receiverId = :receiverId AND isRead = false', {
-        senderId,
-        receiverId,
-      })
+      .where('senderId = :senderId AND receiverId = :receiverId AND isRead = false', { senderId, receiverId })
       .execute();
   }
 
   async getUnreadCount(userId: number): Promise<number> {
-    return this.messageRepository.count({
-      where: { receiverId: userId, isRead: false },
-    });
+    return this.messageRepository.count({ where: { receiverId: userId, isRead: false } });
   }
 
-  // Last message cho mỗi contact
   async getLastMessage(userId1: number, userId2: number): Promise<Message | null> {
     return this.messageRepository
       .createQueryBuilder('message')
@@ -74,28 +62,25 @@ export class ChatService {
       .getOne();
   }
 
-  // Unread count theo từng contact
   async getUnreadCountFrom(senderId: number, receiverId: number): Promise<number> {
-    return this.messageRepository.count({
-      where: { senderId, receiverId, isRead: false },
-    });
+    return this.messageRepository.count({ where: { senderId, receiverId, isRead: false } });
   }
 
-  // Reaction
-  async reactToMessage(
-    messageId: number,
-    userId: number,
-    emoji: string,
-  ): Promise<Message> {
+  async reactToMessage(messageId: number, userId: number, emoji: string): Promise<Message> {
     const message = await this.messageRepository.findOneOrFail({ where: { id: messageId } });
     const reactions = message.reactions || {};
-    // Toggle: nếu đã react cùng emoji thì bỏ, khác thì đổi
-    if (reactions[userId] === emoji) {
-      delete reactions[userId];
-    } else {
-      reactions[userId] = emoji;
-    }
+    if (reactions[userId] === emoji) { delete reactions[userId]; }
+    else { reactions[userId] = emoji; }
     message.reactions = reactions;
+    return this.messageRepository.save(message);
+  }
+
+  // ── Edit message ──────────────────────────────────────────────
+  async editMessage(messageId: number, userId: number, newContent: string): Promise<Message | null> {
+    const message = await this.messageRepository.findOne({ where: { id: messageId, senderId: userId } });
+    if (!message) return null;
+    message.content = newContent;
+    message.isEdited = true;
     return this.messageRepository.save(message);
   }
 

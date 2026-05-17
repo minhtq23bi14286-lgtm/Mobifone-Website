@@ -26,17 +26,19 @@ export default function AdminLayout() {
   const hoverBg = dm ? "hover:bg-white/5 hover:text-white" : "hover:bg-gray-100 hover:text-gray-800";
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className={`flex flex-col h-full`}>
+    <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={`flex items-center justify-between px-4 py-5 border-b ${dm ? "border-white/5" : "border-gray-100"}`}>
         <div>
-          <div className="text-lg font-bold italic">
-            <span className="text-[#0066CC]">mobi</span>
-            <span className="text-[#FF0000]">f</span>
-            <span className="text-[#0066CC]">one</span>
-          </div>
           {(sidebarOpen || mobile) && (
-            <p className="text-xs text-red-400 font-semibold tracking-widest uppercase mt-0.5">Admin Panel</p>
+            <>
+              <div className="text-lg font-bold italic">
+                <span className="text-[#0066CC]">mobi</span>
+                <span className="text-[#FF0000]">f</span>
+                <span className="text-[#0066CC]">one</span>
+              </div>
+              <p className="text-xs text-red-400 font-semibold tracking-widest uppercase mt-0.5">Admin Panel</p>
+            </>
           )}
         </div>
         {!mobile && (
@@ -138,11 +140,10 @@ export default function AdminLayout() {
             className={`p-2 rounded-lg transition-colors ${dm ? "hover:bg-white/10 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>
             <Menu className="w-5 h-5" />
           </button>
-          <div className="text-base font-bold italic">
+          <div className="text-lg font-bold italic">
             <span className="text-[#0066CC]">mobi</span>
             <span className="text-[#FF0000]">f</span>
             <span className="text-[#0066CC]">one</span>
-            <span className={`text-xs font-semibold ml-1 ${dm ? "text-gray-400" : "text-gray-500"}`}>Admin</span>
           </div>
           <button onClick={() => setDarkMode(!dm)}
             className={`p-2 rounded-lg transition-colors ${dm ? "hover:bg-white/10 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>

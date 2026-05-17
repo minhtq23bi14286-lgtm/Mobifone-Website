@@ -266,18 +266,12 @@ export default function Navbar() {
                     <p className="text-xs text-gray-500">{currentUser?.email || ""}</p>
                   </div>
                   <div className="p-2">
-                    <button onClick={() => { navigate("/settings"); setShowProfile(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${dm ? "text-gray-300 hover:bg-white/10" : "text-gray-600 hover:bg-gray-50"}`}>
-                      <User className="w-4 h-4" /> Hồ sơ cá nhân
-                    </button>
+                    
                     <button onClick={() => { navigate("/settings"); setShowProfile(false); }}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${dm ? "text-gray-300 hover:bg-white/10" : "text-gray-600 hover:bg-gray-50"}`}>
                       <Settings className="w-4 h-4" /> Cài đặt
                     </button>
-                    <button onClick={() => { navigate("/contact"); setShowProfile(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${dm ? "text-gray-300 hover:bg-white/10" : "text-gray-600 hover:bg-gray-50"}`}>
-                      <MessageCircle className="w-4 h-4" /> Liên hệ & Hỗ trợ
-                    </button>
+                    
                     <div className={`my-1 h-px ${dm ? "bg-white/5" : "bg-gray-100"}`} />
                     <button onClick={handleLogout}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-red-400 hover:bg-red-50 transition-colors">

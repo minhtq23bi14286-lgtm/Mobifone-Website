@@ -219,7 +219,8 @@ export default function Chat() {
   const [lastMessages, setLastMessages] = useState<Record<number, LastMessageInfo>>({});
   const [uploadingFile, setUploadingFile] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string; signal: any } | null>(null);
-  const [showContactList, setShowContactList] = useState(true); // mobile: toggle contact list
+  const [showContactList, setShowContactList] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<Contact | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const socketInitialized = useRef(false);
@@ -335,85 +336,34 @@ export default function Chat() {
     finally { setUploadingFile(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
 
-  const handleDeleteHistory = async (contactId: number, name: string) => {
-    if (!confirm(`Xóa lịch sử trò chuyện với ${name}?`)) return;
+  const handleDeleteHistory = (contactId: number) => {
+    const contact = contacts.find(c => c.id === contactId);
+    if (contact) setDeleteConfirm(contact);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
     try {
       const token = localStorage.getItem("accessToken");
-      await fetch(`/api/chat/messages/${contactId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      await fetch(`/api/chat/messages/${deleteConfirm.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       setMessages([]);
-      setLastMessages(prev => ({ ...prev, [contactId]: { lastMessage: null, unreadCount: 0 } }));
+      setLastMessages(prev => ({ ...prev, [deleteConfirm.id]: { lastMessage: null, unreadCount: 0 } }));
     } catch (err) { console.error(err); }
+    finally { setDeleteConfirm(null); }
   };
 
   const handleSelectContact = (contact: Contact) => {
     setActiveContact(contact);
-    setShowContactList(false); // mobile: ẩn contact list, hiện chat
+    setShowContactList(false);
   };
 
   const filteredContacts = contacts.filter(c => c.displayName.toLowerCase().includes(search.toLowerCase()));
-
-  // Mobile: tính tổng unread
   const totalUnread = Object.values(lastMessages).reduce((sum, info) => sum + (info.unreadCount || 0), 0);
 
   return (
     <div className="flex flex-1 h-full bg-white overflow-hidden">
 
-      {/* Contact list — desktop: always show | mobile: toggle */}
-      <div className={`
-        flex-col bg-white border-r border-gray-100
-        w-full sm:w-72 sm:flex sm:flex-shrink-0
-        ${showContactList ? "flex" : "hidden sm:flex"}
-      `}>
-        <div className="px-4 pt-5 pb-3">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold text-gray-800">Tin nhắn</h2>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Tìm kiếm..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors" />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {filteredContacts.map(contact => {
-            const info = lastMessages[contact.id];
-            const unread = info?.unreadCount || 0;
-            const last = info?.lastMessage;
-            const isActive = activeContact?.id === contact.id;
-            return (
-              <button key={contact.id} onClick={() => handleSelectContact(contact)}
-                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group relative ${isActive ? "bg-blue-50" : ""}`}>
-                <div className="relative flex-shrink-0">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white font-bold text-sm">
-                    {contact.displayName.charAt(0)}
-                  </div>
-                  {onlineUsers.includes(contact.id) && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />}
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-center justify-between">
-                    <p className={`text-sm font-semibold truncate ${isActive ? "text-[#1F4E79]" : "text-gray-800"}`}>{contact.displayName}</p>
-                    {last?.createdAt && <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{formatLastTime(last.createdAt)}</span>}
-                  </div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <p className={`text-xs truncate ${unread > 0 ? "text-gray-800 font-semibold" : "text-gray-500"}`}>
-                      {last ? (last.senderId === currentUser.id ? "Bạn: " : "") + (last.fileType === "gif" ? "🎬 GIF" : last.fileType === "image" ? "📷 Hình ảnh" : last.fileType === "file" ? "📎 File" : last.content || "") : contact.department}
-                    </p>
-                    {unread > 0 && <span className="ml-1 min-w-[18px] h-[18px] bg-[#1F4E79] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">{unread > 99 ? "99+" : unread}</span>}
-                  </div>
-                </div>
-                {isActive && (
-                  <div role="button" onClick={e => { e.stopPropagation(); handleDeleteHistory(contact.id, contact.displayName); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded-lg transition-all text-gray-400 hover:text-red-500 cursor-pointer">
-                    <Trash2 className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Chat area */}
+      {/* ── Col 1: Chat area ── */}
       <div className={`flex-1 flex flex-col min-w-0 ${showContactList ? "hidden sm:flex" : "flex"}`}>
 
         {/* Header */}
@@ -421,7 +371,6 @@ export default function Chat() {
           {activeContact ? (
             <>
               <div className="flex items-center gap-3">
-                {/* Mobile back button */}
                 <button onClick={() => setShowContactList(true)} className="sm:hidden p-1.5 -ml-1 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
                   <ArrowLeft className="w-5 h-5" />
                 </button>
@@ -437,7 +386,6 @@ export default function Chat() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                {/* Mobile: show contact list button */}
                 <button onClick={() => setShowContactList(true)} className="sm:hidden relative p-2 hover:bg-gray-100 rounded-xl transition-colors text-[#1F4E79]">
                   <Users className="w-5 h-5" />
                   {totalUnread > 0 && <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[9px] flex items-center justify-center font-bold">{totalUnread}</span>}
@@ -540,7 +488,87 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Incoming call */}
+      {/* ── Col 2: Contact list (bên PHẢI) ── */}
+      <div className={`
+        flex-col bg-white border-l border-gray-100
+        w-full sm:w-72 sm:flex sm:flex-shrink-0
+        ${showContactList ? "flex" : "hidden sm:flex"}
+      `}>
+        <div className="px-4 pt-5 pb-3">
+          <h2 className="text-xl font-bold text-gray-800 mb-3">Tin nhắn</h2>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input type="text" placeholder="Tìm kiếm..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-xl text-sm focus:outline-none focus:bg-gray-200 transition-colors" />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {filteredContacts.map(contact => {
+            const info = lastMessages[contact.id];
+            const unread = info?.unreadCount || 0;
+            const last = info?.lastMessage;
+            const isActive = activeContact?.id === contact.id;
+            return (
+              <button key={contact.id} onClick={() => handleSelectContact(contact)}
+                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group relative ${isActive ? "bg-blue-50" : ""}`}>
+                <div className="relative flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center text-white font-bold text-sm">
+                    {contact.displayName.charAt(0)}
+                  </div>
+                  {onlineUsers.includes(contact.id) && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm font-semibold truncate ${isActive ? "text-[#1F4E79]" : "text-gray-800"}`}>{contact.displayName}</p>
+                    {last?.createdAt && <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{formatLastTime(last.createdAt)}</span>}
+                  </div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <p className={`text-xs truncate ${unread > 0 ? "text-gray-800 font-semibold" : "text-gray-500"}`}>
+                      {last ? (last.senderId === currentUser.id ? "Bạn: " : "") + (last.fileType === "gif" ? "🎬 GIF" : last.fileType === "image" ? "📷 Hình ảnh" : last.fileType === "file" ? "📎 File" : last.content || "") : contact.department}
+                    </p>
+                    {unread > 0 && <span className="ml-1 min-w-[18px] h-[18px] bg-[#1F4E79] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">{unread > 99 ? "99+" : unread}</span>}
+                  </div>
+                </div>
+                {isActive && (
+                  <div role="button" onClick={e => { e.stopPropagation(); handleDeleteHistory(contact.id); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded-lg transition-all text-gray-400 hover:text-red-500 cursor-pointer">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Modal: Xác nhận xóa lịch sử ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-8 w-80 max-w-full text-center shadow-2xl">
+            <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-7 h-7 text-red-500" />
+            </div>
+            <p className="text-gray-800 text-lg font-bold mb-2">Xóa lịch sử trò chuyện?</p>
+            <p className="text-gray-500 text-sm mb-6">
+              Toàn bộ tin nhắn với{" "}
+              <span className="font-semibold text-gray-700">{deleteConfirm.displayName}</span>{" "}
+              sẽ bị xóa vĩnh viễn và không thể khôi phục.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-2.5 rounded-2xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 transition-colors">
+                Hủy
+              </button>
+              <button onClick={confirmDelete}
+                className="flex-1 py-2.5 rounded-2xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors">
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Incoming call ── */}
       {incomingCall && !showVideoCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl p-8 w-80 max-w-full text-center shadow-2xl">
