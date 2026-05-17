@@ -122,14 +122,17 @@ export default function VideoCall({
 
       // Nhận remote stream
       pc.ontrack = (event) => {
-        console.log("📺 ontrack fired", event.streams);
-        const remoteStream = event.streams[0];
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.play().catch(e => console.warn("play() failed:", e));
-        }
-        setCallStatus("connected");
-      };
+  console.log("📺 ontrack fired", event.streams);
+  if (remoteVideoRef.current?.srcObject) return; // Chỉ set 1 lần
+  const remoteStream = event.streams[0];
+  if (remoteVideoRef.current && remoteStream) {
+    remoteVideoRef.current.srcObject = remoteStream;
+    remoteVideoRef.current.onloadedmetadata = () => {
+      remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
+    };
+  }
+  setCallStatus("connected");
+};
 
       // Gửi ICE candidates
       pc.onicecandidate = (event) => {
