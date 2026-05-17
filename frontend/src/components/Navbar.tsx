@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Bell, ChevronDown, Search, LogOut, Settings, User,
+  Bell, ChevronDown, Search, LogOut, Settings,
   MessageCircle, Phone, FileText, Users, Menu, X,
   Home, MessageSquare, BookOpen, HeadphonesIcon,
 } from "lucide-react";

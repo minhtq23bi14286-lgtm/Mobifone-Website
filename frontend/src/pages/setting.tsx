@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
-  User, Bell, Palette, Shield, Camera, Key, Monitor,
-  LogOut, ChevronRight, Check, Globe, Moon, Sun,
+  User, Bell, Palette, Shield, Camera, Monitor,
+  ChevronRight, Check, Moon, Sun,
   Smartphone, Eye, EyeOff, Lock, Trash2, AlertTriangle,
 } from "lucide-react";
 import { useThemeStore } from "../store/useThemeStore";
