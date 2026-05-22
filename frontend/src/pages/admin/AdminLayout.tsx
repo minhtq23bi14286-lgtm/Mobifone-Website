@@ -2,15 +2,16 @@ import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Shield, FileText,
-  Settings, LogOut, Menu, X, Sun, Moon,
+  Settings, LogOut, Menu, X, Sun, Moon, Megaphone,
 } from "lucide-react";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard",          path: "/admin" },
-  { icon: Users,           label: "Quản lý người dùng", path: "/admin/users" },
-  { icon: Shield,          label: "Bảo mật & Giám sát", path: "/admin/security" },
-  { icon: FileText,        label: "Quản lý nội dung",   path: "/admin/content" },
-  { icon: Settings,        label: "Cấu hình hệ thống",  path: "/admin/system" },
+  { icon: LayoutDashboard, label: "Dashboard",               path: "/admin" },
+  { icon: Users,           label: "Quản lý người dùng",      path: "/admin/users" },
+  { icon: Shield,          label: "Bảo mật & Giám sát",      path: "/admin/security" },
+  { icon: FileText,        label: "Quản lý nội dung",        path: "/admin/content" },
+  { icon: Megaphone,       label: "Nội dung & Truyền thông", path: "/admin/media" },
+  { icon: Settings,        label: "Cấu hình hệ thống",       path: "/admin/system" },
 ];
 
 export default function AdminLayout() {
@@ -56,7 +57,7 @@ export default function AdminLayout() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {menuItems.map(item => {
           const isActive = location.pathname === item.path;
           return (
@@ -76,7 +77,6 @@ export default function AdminLayout() {
 
       {/* Bottom */}
       <div className={`p-3 border-t space-y-1 ${dm ? "border-white/5" : "border-gray-100"}`}>
-        {/* User info */}
         <div className={`flex items-center gap-3 px-3 py-2 ${!sidebarOpen && !mobile ? "justify-center" : ""}`}>
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold text-xs">A</span>
@@ -89,7 +89,6 @@ export default function AdminLayout() {
           )}
         </div>
 
-        {/* Dark mode */}
         <button onClick={() => setDarkMode(!dm)}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${textSub} ${hoverBg}`}>
           {dm ? <Sun className="w-5 h-5 flex-shrink-0" /> : <Moon className="w-5 h-5 flex-shrink-0" />}
@@ -103,7 +102,6 @@ export default function AdminLayout() {
           )}
         </button>
 
-        {/* Logout */}
         <button onClick={() => navigate("/login")}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${dm ? "text-red-400 hover:bg-red-500/10" : "text-red-400 hover:bg-red-50"}`}>
           <LogOut className="w-5 h-5 flex-shrink-0" />
@@ -115,13 +113,10 @@ export default function AdminLayout() {
 
   return (
     <div className={`flex h-screen overflow-hidden transition-colors duration-300 ${dm ? "bg-[#0f1117] text-white" : "bg-gray-100 text-gray-800"}`}>
-
-      {/* Desktop sidebar */}
       <aside className={`hidden md:flex flex-col border-r transition-all duration-300 flex-shrink-0 ${sidebarOpen ? "w-64" : "w-16"} ${sidebarBg}`}>
         <SidebarContent />
       </aside>
 
-      {/* Mobile overlay + drawer */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
@@ -131,10 +126,7 @@ export default function AdminLayout() {
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-        {/* Mobile topbar */}
         <div className={`md:hidden flex items-center justify-between px-4 py-3 border-b ${dm ? "bg-[#161b27] border-white/5" : "bg-white border-gray-200"}`}>
           <button onClick={() => setMobileOpen(true)}
             className={`p-2 rounded-lg transition-colors ${dm ? "hover:bg-white/10 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>

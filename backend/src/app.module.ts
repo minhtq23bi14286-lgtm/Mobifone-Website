@@ -12,6 +12,8 @@ import { ContactRequestsModule } from './contact-requests/contact-requests.modul
 import { AdminModule } from './admin/admin.module';
 import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
+import { HomeModule } from './home/home.module';
+
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -49,6 +51,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     AdminModule,
     SecurityModule,
     SystemModule,
+    HomeModule,
   ],
 })
 export class AppModule {}

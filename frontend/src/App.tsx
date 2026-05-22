@@ -15,7 +15,7 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSecurity from "./pages/admin/AdminSecurity";
 import AdminContent from "./pages/admin/AdminContent";
 import AdminSystem from "./pages/admin/Adminsystem";
-
+import AdminMedia from "./pages/admin/AdminMedia";
 function App() {
   const { darkMode } = useThemeStore();  // ✅ bên trong App
 
@@ -57,6 +57,7 @@ function App() {
           <Route path="/admin/security" element={<AdminSecurity />} />
           <Route path="/admin/content" element={<AdminContent />} />
           <Route path="/admin/system" element={<AdminSystem />} />
+          <Route path="/admin/media" element={<AdminMedia />} />
         </Route>
       </Routes>
     </BrowserRouter>

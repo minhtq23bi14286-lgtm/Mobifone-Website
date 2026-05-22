@@ -15,11 +15,7 @@ interface VideoCallProps {
 }
 
 export default function VideoCall({
-  socket,
-  contact,
-  onClose,
-  isIncoming = false,
-  incomingSignal,
+  socket, contact, onClose, isIncoming = false, incomingSignal,
 }: VideoCallProps) {
   const [callStatus, setCallStatus] = useState<"calling" | "connected" | "ended">("calling");
   const [isMuted, setIsMuted] = useState(false);
@@ -30,7 +26,6 @@ export default function VideoCall({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerRef        = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  // Buffer ICE candidates nhận được trước khi remote desc được set
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSet  = useRef(false);
 
@@ -51,7 +46,6 @@ export default function VideoCall({
     ];
   };
 
-  // Helper: set remote desc rồi flush pending candidates
   const setRemoteDescAndFlush = async (pc: RTCPeerConnection, signal: any) => {
     await pc.setRemoteDescription(new RTCSessionDescription(signal));
     remoteDescSet.current = true;
@@ -78,7 +72,6 @@ export default function VideoCall({
       if (remoteDescSet.current) {
         try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
       } else {
-        // Buffer lại để flush sau khi set remote desc
         pendingCandidates.current.push(candidate);
       }
     });
@@ -97,7 +90,6 @@ export default function VideoCall({
 
   const startCall = async (servers: RTCIceServer[]) => {
     try {
-      // Lấy local stream
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -111,30 +103,24 @@ export default function VideoCall({
         localVideoRef.current.play().catch(() => {});
       }
 
-      const pc = new RTCPeerConnection({
-        iceServers: servers,
-        iceTransportPolicy: "all",
-      });
+      const pc = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: "all" });
       peerRef.current = pc;
 
-      // Thêm tracks
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      // Nhận remote stream
       pc.ontrack = (event) => {
-  console.log("📺 ontrack fired", event.streams);
-  if (remoteVideoRef.current?.srcObject) return; // Chỉ set 1 lần
-  const remoteStream = event.streams[0];
-  if (remoteVideoRef.current && remoteStream) {
-    remoteVideoRef.current.srcObject = remoteStream;
-    remoteVideoRef.current.onloadedmetadata = () => {
-      remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
-    };
-  }
-  setCallStatus("connected");
-};
+        console.log("📺 ontrack fired", event.streams);
+        if (remoteVideoRef.current?.srcObject) return;
+        const remoteStream = event.streams[0];
+        if (remoteVideoRef.current && remoteStream) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.onloadedmetadata = () => {
+            remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
+          };
+        }
+        setCallStatus("connected");
+      };
 
-      // Gửi ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit("iceCandidate", {
@@ -152,30 +138,30 @@ export default function VideoCall({
           console.warn("ICE failed — restarting ICE");
           pc.restartIce();
         } else if (pc.iceConnectionState === "disconnected") {
-          setCallStatus("ended");
-          setTimeout(onClose, 2000);
+          // Chờ 5s xem có tự recover không
+          setTimeout(() => {
+            if (pc.iceConnectionState === "disconnected") {
+              setCallStatus("ended");
+              setTimeout(onClose, 2000);
+            }
+          }, 5000);
         }
       };
 
       pc.onconnectionstatechange = () => {
         console.log("Connection state:", pc.connectionState);
         if (pc.connectionState === "connected") setCallStatus("connected");
-        if (pc.connectionState === "failed")    { setCallStatus("ended"); setTimeout(onClose, 1500); }
+        if (pc.connectionState === "failed") { setCallStatus("ended"); setTimeout(onClose, 1500); }
       };
 
       if (isIncoming && incomingSignal) {
-        // Bên nhận: set offer → answer
         await setRemoteDescAndFlush(pc, incomingSignal);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("answerCall", { callerId: contact.id, signal: answer });
         setCallStatus("connected");
       } else {
-        // Bên gọi: tạo offer
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true,
-        });
+        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
         socket.emit("callUser", { receiverId: contact.id, signal: offer });
       }
@@ -218,7 +204,7 @@ export default function VideoCall({
         const screenTrack = screen.getVideoTracks()[0];
         const sender = peerRef.current?.getSenders().find(s => s.track?.kind === "video");
         sender?.replaceTrack(screenTrack);
-        if (localVideoRef.current) { localVideoRef.current.srcObject = screen; }
+        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
         screenTrack.onended = () => {
           setIsScreenSharing(false);
           const camTrack = localStreamRef.current?.getVideoTracks()[0];
@@ -244,11 +230,8 @@ export default function VideoCall({
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex-1 relative overflow-hidden">
 
-        {/* Remote video — luôn render, ẩn khi chưa connected */}
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
+        {/* Remote video */}
+        <video ref={remoteVideoRef} autoPlay playsInline
           className={`w-full h-full object-cover transition-opacity duration-500 ${callStatus === "connected" ? "opacity-100" : "opacity-0"}`}
         />
 
@@ -290,17 +273,14 @@ export default function VideoCall({
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isMuted ? "bg-red-500" : "bg-white/20 hover:bg-white/30"}`}>
           {isMuted ? <MicOff className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
         </button>
-
         <button onClick={endCall}
           className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors shadow-lg">
           <PhoneOff className="w-7 h-7 text-white" />
         </button>
-
         <button onClick={toggleVideo}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? "bg-red-500" : "bg-white/20 hover:bg-white/30"}`}>
           {isVideoOff ? <VideoOff className="w-6 h-6 text-white" /> : <Video className="w-6 h-6 text-white" />}
         </button>
-
         <button onClick={toggleScreenShare}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? "bg-blue-500" : "bg-white/20 hover:bg-white/30"}`}>
           <Monitor className="w-6 h-6 text-white" />
