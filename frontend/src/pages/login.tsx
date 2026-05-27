@@ -372,9 +372,22 @@ export default function Login() {
       });
 
       if (!response.ok) {
-        setError("Email hoặc mật khẩu không đúng!");
-        return;
-      }
+  const data = await response.json().catch(() => ({}));
+
+  // Account locked → redirect to Access Denied page
+  if (
+  response.status === 403 ||
+  data.message?.toLowerCase().includes("locked") ||
+  data.message?.toLowerCase().includes("blocked") ||
+  data.message?.includes("tạm khóa")
+  ){
+    navigate("/access-denied");
+    return;
+  }
+
+  setError(data.message || "Email hoặc mật khẩu không đúng!");
+  return;
+}
 
       const data = await response.json();
       localStorage.setItem("accessToken", data.accessToken);

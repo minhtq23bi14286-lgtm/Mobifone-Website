@@ -16,6 +16,8 @@ import AdminSecurity from "./pages/admin/AdminSecurity";
 import AdminContent from "./pages/admin/AdminContent";
 import AdminSystem from "./pages/admin/Adminsystem";
 import AdminMedia from "./pages/admin/AdminMedia";
+import AccessDenied from './pages/AccessDenied';
+
 function App() {
   const { darkMode } = useThemeStore();  // ✅ bên trong App
 
@@ -32,6 +34,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/access-denied" element={<AccessDenied />} />
 
         <Route element={
           <ProtectedRoute>
@@ -45,6 +48,8 @@ function App() {
           <Route path="/forum" element={<Forum />} />
           <Route path="/settings" element={<Setting />} />
           <Route path="/contact" element={<Contact />} />
+          
+
         </Route>
 
         <Route element={
@@ -52,6 +57,7 @@ function App() {
             <AdminLayout />
           </ProtectedRoute>
         }>
+          
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/security" element={<AdminSecurity />} />
