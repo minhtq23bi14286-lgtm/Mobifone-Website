@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 import VideoCall from "../components/VideoCall";
+import { useSearchParams } from "react-router-dom";
 
 const GIPHY_API_KEY = "LcDK349I5nP9QQbiMb6kFChTbFMJzJkU";
 
@@ -227,28 +228,44 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
+
+  // 🔔 Read userId from URL query param (from notification click)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetUserId = searchParams.get("userId");
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const token = localStorage.getItem("accessToken");
+        const token = sessionStorage.getItem("accessToken");
         if (!token) return;
         const res = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const data = await res.json();
         const filtered = (Array.isArray(data) ? data : []).filter((u: Contact) => u.id !== currentUser.id);
         setContacts(filtered);
-        if (filtered.length > 0) setActiveContact(filtered[0]);
+        if (filtered.length > 0 && !targetUserId) setActiveContact(filtered[0]);
       } catch (err) { console.error(err); }
     };
     fetchUsers();
   }, []);
 
+  // 🔔 Auto-select contact from notification click (?userId=...)
+  useEffect(() => {
+    if (!targetUserId || contacts.length === 0) return;
+    const target = contacts.find(c => c.id === Number(targetUserId));
+    if (target) {
+      setActiveContact(target);
+      setShowContactList(false); // mobile: hide contact list, show chat
+      // Clear the query param so it doesn't re-trigger
+      setSearchParams({}, { replace: true });
+    }
+  }, [targetUserId, contacts]);
+
   useEffect(() => {
     if (socketInitialized.current) return;
     socketInitialized.current = true;
-    const token = localStorage.getItem("accessToken");
+    const token = sessionStorage.getItem("accessToken");
     if (!token) return;
     const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', { auth: { token } });
     socketRef.current = socket;
@@ -324,7 +341,7 @@ export default function Chat() {
     if (!file || !activeContact) return;
     setUploadingFile(true);
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/chat/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData });
@@ -344,7 +361,7 @@ export default function Chat() {
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       await fetch(`/api/chat/messages/${deleteConfirm.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       setMessages([]);
       setLastMessages(prev => ({ ...prev, [deleteConfirm.id]: { lastMessage: null, unreadCount: 0 } }));

@@ -22,16 +22,10 @@ export class AuthService {
     }
 
     // Tìm user
-    const user = await this.usersService.findByEmail(email);
+       const user = await this.usersService.findByEmail(email);
     if (!user) {
       await this.securityService.logLogin(email, 'failed', ipAddress, userAgent, undefined, 'Email không tồn tại');
-      const fails = await this.securityService.getFailedAttempts(email);
-      const remaining = 5 - fails;
-      throw new UnauthorizedException(
-        remaining > 0
-          ? `Email hoặc mật khẩu không đúng! Còn ${remaining} lần thử.`
-          : 'Email hoặc mật khẩu không đúng!'
-      );
+      throw new UnauthorizedException('Không tìm thấy tài khoản với email này!');
     }
 
     // Kiểm tra tài khoản có active không

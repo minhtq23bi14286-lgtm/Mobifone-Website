@@ -57,11 +57,11 @@ export default function Contact() {
   const [errors, setErrors] = useState<Partial<ContactForm>>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
 
   const fetchRequests = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       const res = await fetch("/api/contact-requests/my", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       setRequests(await res.json());
@@ -82,7 +82,7 @@ export default function Contact() {
     if (!validate()) return;
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       const res = await fetch("/api/contact-requests", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -100,7 +100,7 @@ export default function Contact() {
   const handleDelete = async (id: number) => {
     if (!confirm("Bạn có chắc muốn xóa yêu cầu này?")) return;
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       await fetch(`/api/contact-requests/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       fetchRequests();
     } catch (err) { console.error(err); }

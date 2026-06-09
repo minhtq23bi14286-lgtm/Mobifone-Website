@@ -3,6 +3,7 @@ import {
   Bell, ChevronDown, Search, LogOut, Settings,
   MessageCircle, Phone, FileText, Users, Menu, X,
   Home, MessageSquare, BookOpen, HeadphonesIcon,
+  Megaphone, Calendar, Building2,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useThemeStore } from "../store/useThemeStore";
@@ -23,6 +24,7 @@ interface Notification {
   isRead: boolean;
   createdAt: string;
   referenceId?: number;
+  commentId?: number;
 }
 
 export default function Navbar() {
@@ -37,12 +39,12 @@ export default function Navbar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const socketRef = useRef<Socket | null>(null);
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
 
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const token = localStorage.getItem("accessToken");
+        const token = sessionStorage.getItem("accessToken");
         if (!token) return;
         const response = await fetch("/api/notifications", {
           headers: { Authorization: `Bearer ${token}` },
@@ -57,11 +59,12 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
+    const token = sessionStorage.getItem("accessToken");
     if (!token || socketRef.current) return;
     const socket = io({ auth: { token } });
     socketRef.current = socket;
     socket.on("newNotification", (notif: Notification) => {
+      // Nếu là broadcast, chỉ thêm nếu không phải chính mình tạo
       setNotifications(prev => [{ ...notif, isRead: false }, ...prev].slice(0, 20));
       setUnreadCount(prev => prev + 1);
     });
@@ -73,7 +76,7 @@ export default function Navbar() {
 
   const handleMarkAllRead = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       await fetch("/api/notifications/read-all", {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
@@ -86,7 +89,7 @@ export default function Navbar() {
   const handleMarkRead = async (id?: number) => {
     if (!id) return;
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       await fetch(`/api/notifications/${id}/read`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
@@ -96,29 +99,99 @@ export default function Navbar() {
     } catch (err) { console.error(err); }
   };
 
+  // 🔔 Click notification → navigate đến đúng trang
+  const handleNotifClick = async (notif: Notification) => {
+    await handleMarkRead(notif.id);
+    setShowNotif(false);
+
+    switch (notif.type) {
+      case "message":
+        // referenceId = senderId → navigate đến chat với người đó
+        if (notif.referenceId) {
+          navigate(`/chat?userId=${notif.referenceId}`);
+        } else {
+          navigate("/chat");
+        }
+        break;
+
+      case "call":
+        navigate("/chat");
+        break;
+
+      case "comment":
+        // referenceId = postId, commentId = specific comment → highlight it
+        if (notif.referenceId) {
+          const params = new URLSearchParams({ postId: String(notif.referenceId) });
+          if (notif.commentId) params.set("commentId", String(notif.commentId));
+          navigate(`/forum?${params.toString()}`);
+        } else {
+          navigate("/forum");
+        }
+        break;
+
+      case "post_approved":
+      case "post_rejected":
+      case "post":
+        // referenceId = postId → navigate đến bài viết
+        if (notif.referenceId) {
+          navigate(`/forum?postId=${notif.referenceId}`);
+        } else {
+          navigate("/forum");
+        }
+        break;
+
+      case "announcement":
+      case "event":
+      case "department_news":
+        // Tin tức, sự kiện, thông báo → về trang chủ
+        navigate("/home");
+        break;
+
+      case "user_online":
+        navigate("/chat");
+        break;
+
+      default:
+        navigate("/home");
+        break;
+    }
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("user");
     navigate("/login");
   };
 
   const getNotifIcon = (type: string) => {
     switch (type) {
-      case "message":    return <MessageCircle className="w-4 h-4 text-white" />;
-      case "call":       return <Phone className="w-4 h-4 text-white" />;
-      case "post":       return <FileText className="w-4 h-4 text-white" />;
-      case "user_online":return <Users className="w-4 h-4 text-white" />;
-      default:           return <Bell className="w-4 h-4 text-white" />;
+      case "message":       return <MessageCircle className="w-4 h-4 text-white" />;
+      case "call":          return <Phone className="w-4 h-4 text-white" />;
+      case "comment":       return <MessageSquare className="w-4 h-4 text-white" />;
+      case "post":
+      case "post_approved":
+      case "post_rejected": return <FileText className="w-4 h-4 text-white" />;
+      case "announcement":  return <Megaphone className="w-4 h-4 text-white" />;
+      case "event":         return <Calendar className="w-4 h-4 text-white" />;
+      case "department_news": return <Building2 className="w-4 h-4 text-white" />;
+      case "user_online":   return <Users className="w-4 h-4 text-white" />;
+      default:              return <Bell className="w-4 h-4 text-white" />;
     }
   };
 
   const getNotifColor = (type: string) => {
     switch (type) {
-      case "message":    return "from-blue-500 to-blue-600";
-      case "call":       return "from-green-500 to-green-600";
-      case "post":       return "from-purple-500 to-purple-600";
-      case "user_online":return "from-orange-500 to-orange-600";
-      default:           return "from-[#1F4E79] to-[#2E75B6]";
+      case "message":        return "from-blue-500 to-blue-600";
+      case "call":           return "from-green-500 to-green-600";
+      case "comment":        return "from-indigo-500 to-indigo-600";
+      case "post":
+      case "post_approved":  return "from-emerald-500 to-emerald-600";
+      case "post_rejected":  return "from-red-500 to-red-600";
+      case "announcement":   return "from-amber-500 to-amber-600";
+      case "event":          return "from-cyan-500 to-cyan-600";
+      case "department_news":return "from-teal-500 to-teal-600";
+      case "user_online":    return "from-orange-500 to-orange-600";
+      default:               return "from-[#1F4E79] to-[#2E75B6]";
     }
   };
 
@@ -220,7 +293,7 @@ export default function Navbar() {
                         <p className="text-xs text-gray-400">Không có thông báo nào</p>
                       </div>
                     ) : notifications.map((notif, i) => (
-                      <div key={i} onClick={() => handleMarkRead(notif.id)}
+                      <div key={notif.id || i} onClick={() => handleNotifClick(notif)}
                         className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
                           !notif.isRead ? dm ? "bg-blue-500/10" : "bg-blue-50/50" : ""
                         } ${dm ? "hover:bg-white/5" : "hover:bg-gray-50"}`}>

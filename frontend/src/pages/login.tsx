@@ -390,13 +390,13 @@ export default function Login() {
 }
 
       const data = await response.json();
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      sessionStorage.setItem("accessToken", data.accessToken);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
       if (data.user.role === "admin") {
-  navigate("/admin");
-} else {
-  navigate("/home");
-}
+        navigate("/admin");
+      } else {
+        navigate("/home");
+      }
     } catch (err) {
       setError("Lỗi kết nối server. Vui lòng thử lại!");
     } finally {

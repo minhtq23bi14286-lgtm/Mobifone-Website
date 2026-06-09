@@ -77,7 +77,7 @@ export default function AdminDashboard() {
   const socketRef = useRef<Socket | null>(null);
   const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken");
 
   // ── Fetch stats ───────────────────────────────────────────────────────────
   const fetchStats = async (silent = false) => {

@@ -57,8 +57,8 @@ export default function Home() {
   const [isLoadingHome, setIsLoadingHome] = useState(true);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-  const token = localStorage.getItem("accessToken");
+  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
+  const token = sessionStorage.getItem("accessToken");
 
   useEffect(() => {
     const fetchPosts = async () => {

@@ -98,7 +98,7 @@ export default function AdminUsers() {
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   const fetchUsers = async () => {

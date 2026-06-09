@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useThemeStore } from "../store/useThemeStore";
 
-const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
 
 const TABS = [
   { id: "account",      label: "Tài khoản & Hồ sơ", icon: User },

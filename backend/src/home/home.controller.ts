@@ -1,10 +1,33 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Request, UseGuards } from '@nestjs/common';
 import { HomeService } from './home.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ChatGateway } from '../chat/chat.gateway';
+import { UsersService } from '../users/users.service';
 
 @Controller('api/home')
 export class HomeController {
-  constructor(private homeService: HomeService) {}
+  constructor(
+    private homeService: HomeService,
+    private notificationsService: NotificationsService,
+    private chatGateway: ChatGateway,
+    private usersService: UsersService,
+  ) {}
+
+  // Helper: broadcast notification to all users
+  private async broadcastNotification(type: string, title: string, content: string, referenceId?: number) {
+    const users = await this.usersService.findAll();
+    for (const user of users) {
+      await this.notificationsService.createNotification(
+        user.id, type, title, content, referenceId,
+      );
+    }
+    // Emit real-time to all connected clients
+    this.chatGateway.server.emit('newNotification', {
+      type, title, content, referenceId, createdAt: new Date(),
+      broadcast: true, // flag to tell frontend this is for everyone
+    });
+  }
 
   // ── Announcements ─────────────────────────────────────────────
   @Get('announcements')
@@ -13,8 +36,16 @@ export class HomeController {
 
   @Post('announcements')
   @UseGuards(JwtAuthGuard)
-  createAnnouncement(@Request() req: any, @Body() body: any) {
-    return this.homeService.createAnnouncement({ ...body, createdBy: req.user.sub });
+  async createAnnouncement(@Request() req: any, @Body() body: any) {
+    const announcement = await this.homeService.createAnnouncement({ ...body, createdBy: req.user.sub });
+
+    // 🔔 Notification: thông báo tất cả nhân viên có thông báo mới
+    await this.broadcastNotification(
+      'announcement', 'Thông báo mới',
+      `📢 ${body.title}`, announcement.id,
+    );
+
+    return announcement;
   }
 
   @Patch('announcements/:id')
@@ -36,8 +67,17 @@ export class HomeController {
 
   @Post('events')
   @UseGuards(JwtAuthGuard)
-  createEvent(@Request() req: any, @Body() body: any) {
-    return this.homeService.createEvent({ ...body, createdBy: req.user.sub });
+  async createEvent(@Request() req: any, @Body() body: any) {
+    const event = await this.homeService.createEvent({ ...body, createdBy: req.user.sub });
+
+    // 🔔 Notification: thông báo tất cả nhân viên có sự kiện mới
+    await this.broadcastNotification(
+      'event', 'Sự kiện mới',
+      `📅 ${body.title}${body.date ? ` — ${new Date(body.date).toLocaleDateString('vi-VN')}` : ''}`,
+      event.id,
+    );
+
+    return event;
   }
 
   @Patch('events/:id')
@@ -59,8 +99,17 @@ export class HomeController {
 
   @Post('news')
   @UseGuards(JwtAuthGuard)
-  createDepartmentNews(@Request() req: any, @Body() body: any) {
-    return this.homeService.createDepartmentNews({ ...body, createdBy: req.user.sub });
+  async createDepartmentNews(@Request() req: any, @Body() body: any) {
+    const news = await this.homeService.createDepartmentNews({ ...body, createdBy: req.user.sub });
+
+    // 🔔 Notification: thông báo tất cả nhân viên có tin phòng ban mới
+    await this.broadcastNotification(
+      'department_news', 'Tin phòng ban mới',
+      `🏢 ${body.title}${body.department ? ` — ${body.department}` : ''}`,
+      news.id,
+    );
+
+    return news;
   }
 
   @Patch('news/:id')

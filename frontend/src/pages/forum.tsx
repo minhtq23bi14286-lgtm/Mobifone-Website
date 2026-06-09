@@ -6,6 +6,7 @@ import {
   Send, ChevronLeft, ChevronRight, Pencil, Check,
 } from "lucide-react";
 import { useThemeStore } from "../store/useThemeStore";
+import { useSearchParams } from "react-router-dom";
 
 const POST_COLORS = [
   "from-blue-500 to-indigo-600",
@@ -59,7 +60,7 @@ function CreatePostModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     if (!title.trim() || !content.trim()) { setError("Vui lòng nhập tiêu đề và nội dung!"); return; }
     setIsLoading(true); setError("");
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("accessToken");
       const formData = new FormData();
       formData.append("title", title); formData.append("content", content);
       formData.append("category", category); formData.append("tags", tags);
@@ -164,8 +165,19 @@ export default function Forum() {
   const [loadingComments, setLoadingComments] = useState(false);
   const [editingComment, setEditingComment] = useState<{ id: number; content: string } | null>(null);
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-  const token = localStorage.getItem("accessToken");
+  const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
+  const token = sessionStorage.getItem("accessToken");
+
+  // 🔔 Read postId and commentId from URL query param (from notification click)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetPostId = searchParams.get("postId");
+  const targetCommentId = searchParams.get("commentId");
+
+  // Highlighted comment (blue border animation)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
+
+  // Ref for comment section auto-scroll
+  const commentSectionRef = useRef<HTMLDivElement>(null);
 
   const fetchPosts = async () => {
     try {
@@ -176,6 +188,35 @@ export default function Forum() {
     finally { setIsLoading(false); }
   };
   useEffect(() => { fetchPosts(); }, []);
+
+  // 🔔 Auto-select post from notification click (?postId=...&commentId=...)
+  useEffect(() => {
+    if (!targetPostId || posts.length === 0) return;
+    const target = posts.find(p => p.id === Number(targetPostId));
+    if (target) {
+      setSelectedPost(target);
+      if (targetCommentId) {
+        setHighlightedCommentId(Number(targetCommentId));
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, [targetPostId, posts]);
+
+  // 🔔 Scroll to highlighted comment after comments load
+  useEffect(() => {
+    if (!highlightedCommentId || comments.length === 0) return;
+    setTimeout(() => {
+      const el = document.getElementById(`comment-${highlightedCommentId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        commentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 300);
+    // Auto-remove highlight after 4 seconds
+    const timer = setTimeout(() => setHighlightedCommentId(null), 4000);
+    return () => clearTimeout(timer);
+  }, [highlightedCommentId, comments]);
 
   useEffect(() => {
     if (!selectedPost) { setComments([]); setEditingComment(null); return; }
@@ -203,6 +244,10 @@ export default function Forum() {
         setComments(prev => [...prev, { ...newComment, authorName: newComment.authorName || currentUser.displayName }]);
         setCommentText("");
         setPosts(prev => prev.map(p => p.id === selectedPost.id ? { ...p, comments: p.comments + 1 } : p));
+        // Auto-scroll to the new comment
+        setTimeout(() => {
+          commentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 100);
       }
     } catch { } finally { setIsPostingComment(false); }
   };
@@ -256,6 +301,15 @@ export default function Forum() {
   const handleTagClick = (tag: string) => {
     if (activeTag === tag) { setActiveTag(null); setSearch(""); }
     else { setActiveTag(tag); setSearch(tag); }
+  };
+
+  // 🔔 Click comment count on post card → open post and scroll to comments
+  const handleCommentClick = (post: Post, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedPost(post);
+    setTimeout(() => {
+      commentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
   };
 
   const formatTime = (dateStr: string) => {
@@ -428,7 +482,8 @@ export default function Forum() {
                         <ThumbsUp className={`${compact ? "w-3.5 h-3.5" : "w-4 h-4"} ${isLiked ? "fill-[#1F4E79]" : ""}`} />
                         {post.likes + (isLiked ? 1 : 0)}
                       </button>
-                      <button onClick={e => { e.stopPropagation(); setSelectedPost(isSelected ? null : post); }}
+                      {/* 🔔 Click comment count → open post + scroll to comments */}
+                      <button onClick={e => handleCommentClick(post, e)}
                         className={`flex items-center gap-1.5 px-2.5 rounded-lg font-medium transition-colors ${compact ? "py-1.5 text-xs" : "py-2 text-sm"} ${isSelected ? "text-[#1F4E79]" : `${textSub} ${hoverBg}`}`}>
                         <MessageCircle className={compact ? "w-3.5 h-3.5" : "w-4 h-4"} />{post.comments}
                       </button>
@@ -525,8 +580,8 @@ export default function Forum() {
                 ))}
               </div>
 
-              {/* ── Comments ── */}
-              <div className={`border-t pt-4 ${border}`}>
+              {/* ── Comments Section (with ref for auto-scroll) ── */}
+              <div ref={commentSectionRef} className={`border-t pt-4 ${border}`}>
                 <p className={`text-sm font-bold mb-3 flex items-center gap-2 ${textMain}`}>
                   <MessageCircle className="w-4 h-4 text-[#1F4E79]" />
                   Bình luận ({comments.length})
@@ -561,7 +616,8 @@ export default function Forum() {
                 ) : (
                   <div className="space-y-3">
                     {comments.map(comment => (
-                      <div key={comment.id} className="flex items-start gap-2 group">
+                      <div key={comment.id} id={`comment-${comment.id}`}
+                        className="flex items-start gap-2 group">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center flex-shrink-0">
                           <span className="text-white text-[10px] font-bold">{comment.authorName?.charAt(0) || "U"}</span>
                         </div>
@@ -581,7 +637,11 @@ export default function Forum() {
                               </button>
                             </div>
                           ) : (
-                            <div className={`px-3 py-2 rounded-xl text-sm ${darkMode ? "bg-white/5" : "bg-gray-100"}`}>
+                            <div className={`px-3 py-2 rounded-xl text-sm transition-all duration-500 ${
+                              highlightedCommentId === comment.id
+                                ? "ring-2 ring-[#2E75B6] bg-blue-50 shadow-md shadow-blue-200/50"
+                                : darkMode ? "bg-white/5" : "bg-gray-100"
+                            }`}>
                               <p className={`text-xs font-semibold mb-0.5 ${textMain}`}>{comment.authorName || "Người dùng"}</p>
                               <p className={`text-sm leading-relaxed ${textMain}`}>{comment.content}</p>
                             </div>

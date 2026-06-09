@@ -68,7 +68,7 @@ export default function AdminSecurity() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [limit, setLimit] = useState(50);
 
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken");
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchData = async (silent = false) => {

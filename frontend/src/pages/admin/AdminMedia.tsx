@@ -58,7 +58,7 @@ const EVENT_TYPES = [
 export default function AdminMedia() {
   const { darkMode: dm } = useOutletContext<DarkModeContext>();
   const [activeTab, setActiveTab] = useState("announcements");
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken");
 
   // Data
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);

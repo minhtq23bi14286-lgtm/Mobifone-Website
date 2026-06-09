@@ -65,7 +65,7 @@ export default function AdminSystem() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
 
-  const token = localStorage.getItem("accessToken");
+  const token = sessionStorage.getItem("accessToken");
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
