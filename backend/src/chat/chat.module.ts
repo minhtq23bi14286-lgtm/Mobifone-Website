@@ -7,15 +7,18 @@ import { ChatController } from './chat.controller';
 import { Message } from './message.entity';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Message]),
     UsersModule,
     NotificationsModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'mobifone-secret-key-2026',
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   providers: [ChatService, ChatGateway],

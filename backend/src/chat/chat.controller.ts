@@ -4,6 +4,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { uploadFileFilter } from '../common/upload-file-filter';
 
 @Controller('api/chat')
 export class ChatController {
@@ -27,6 +28,7 @@ export class ChatController {
       },
     }),
     limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: uploadFileFilter,
   }))
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
     return { url: `/uploads/chat/${file.filename}` };

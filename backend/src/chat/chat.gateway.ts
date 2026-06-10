@@ -7,6 +7,7 @@ import { ChatService } from './chat.service';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Message } from './message.entity';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 
 @WebSocketGateway({
@@ -30,7 +31,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = client.handshake.auth.token;
       if (!token) { client.disconnect(); return; }
       const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'mobifone-secret-key-2026',
+        secret: getJwtSecret(),
       });
       client.data.userId = payload.sub;
       client.data.displayName = payload.displayName;

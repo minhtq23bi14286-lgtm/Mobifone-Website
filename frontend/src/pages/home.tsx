@@ -76,7 +76,7 @@ export default function Home() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch("/api/users/contacts", { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const data = await res.json();
         setOnlineUsers(Array.isArray(data) ? data.filter((u: OnlineUser) => u.id !== currentUser.id).slice(0, 4) : []);

@@ -1,14 +1,19 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UsersService } from '../users/users.service';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { ChatGateway } from '../chat/chat.gateway';
+import { SecurityService } from '../security/security.service';
+import { UsersService } from '../users/users.service';
 
 @Controller('api/admin/stats')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin')
 export class AdminStatsController {
   constructor(
     private usersService: UsersService,
     private chatGateway: ChatGateway,
+    private securityService: SecurityService,
   ) {}
 
   @Get()
@@ -17,18 +22,26 @@ export class AdminStatsController {
     const totalUsers = allUsers.length;
     const activeUsers = allUsers.filter((u: any) => u.isActive).length;
     const onlineCount = this.chatGateway.getOnlineCount();
+    const securityStats = await this.securityService.getSecurityStats();
+    const securityAlerts = [
+      ...(securityStats.failedToday > 0
+        ? [{ type: 'warning', msg: `${securityStats.failedToday} failed login attempts today`, time: 'today' }]
+        : []),
+      ...(securityStats.failedWeek > 0
+        ? [{ type: 'info', msg: `${securityStats.failedWeek} failed login attempts in the last 7 days`, time: 'last 7 days' }]
+        : []),
+      ...securityStats.suspectIPs.map((item: any) => ({
+        type: 'error',
+        msg: `Suspicious IP ${item.ip} has ${item.fail_count || item.failCount} failed login attempts`,
+        time: item.last_attempt || item.lastAttempt,
+      })),
+    ];
 
     return {
       totalUsers,
       activeUsers,
       onlineCount,
-      // Cảnh báo bảo mật mock — thay bằng bảng thật sau
-      securityAlerts: [
-        { type: "warning", msg: "5 lần đăng nhập thất bại từ IP 192.168.1.105", time: "5 phút trước" },
-        { type: "error",   msg: "Tài khoản nguyen.van.x@mobifone.vn bị khóa tự động", time: "12 phút trước" },
-        { type: "info",    msg: `Người dùng mới đăng ký: ${activeUsers} tài khoản active`, time: "1 giờ trước" },
-        { type: "success", msg: "Backup database hoàn thành lúc 02:00 AM", time: "8 giờ trước" },
-      ],
+      securityAlerts,
     };
   }
 }

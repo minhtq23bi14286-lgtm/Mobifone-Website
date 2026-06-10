@@ -239,7 +239,7 @@ export default function Chat() {
       try {
         const token = sessionStorage.getItem("accessToken");
         if (!token) return;
-        const res = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch("/api/users/contacts", { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const data = await res.json();
         const filtered = (Array.isArray(data) ? data : []).filter((u: Contact) => u.id !== currentUser.id);
