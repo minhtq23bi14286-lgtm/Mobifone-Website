@@ -8,8 +8,11 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { PostsService } from './posts.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { uploadFileFilter } from '../common/upload-file-filter';
 
 @Controller('api/posts')
 export class PostsController {
@@ -32,13 +35,15 @@ export class PostsController {
   }
 
   @Get('admin/all')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getAllAdmin(@Query('status') status?: string) {
     return this.postsService.getAllPostsAdmin(status);
   }
 
   @Get('admin/stats')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getModerationStats() {
     return this.postsService.getModerationStats();
   }
@@ -60,6 +65,7 @@ export class PostsController {
       },
     }),
     limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: uploadFileFilter,
   }))
   async createPost(
     @Request() req: any,
@@ -151,7 +157,8 @@ export class PostsController {
   // ── Admin endpoints ───────────────────────────────────────────
 
   @Patch('admin/:id/approve')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async approvePost(@Param('id') id: string, @Request() req: any) {
     const post = await this.postsService.approvePost(Number(id), req.user.sub);
 
@@ -173,7 +180,8 @@ export class PostsController {
   }
 
   @Patch('admin/:id/reject')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async rejectPost(@Param('id') id: string, @Request() req: any, @Body() body: { reason?: string }) {
     const post = await this.postsService.rejectPost(Number(id), req.user.sub, body.reason);
 
@@ -196,7 +204,8 @@ export class PostsController {
   }
 
   @Delete('admin/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async adminDeletePost(@Param('id') id: string) {
     const success = await this.postsService.adminDeletePost(Number(id));
     return { success };

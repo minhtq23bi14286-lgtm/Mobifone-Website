@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { SecurityModule } from '../security/security.module';
+import { getJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { SecurityModule } from '../security/security.module';
     SecurityModule,
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'mobifone-secret-key-2026',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

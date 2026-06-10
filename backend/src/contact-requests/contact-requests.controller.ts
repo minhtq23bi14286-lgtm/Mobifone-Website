@@ -4,6 +4,8 @@ import {
 } from '@nestjs/common';
 import { ContactRequestsService } from './contact-requests.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 
 @Controller('api/contact-requests')
 @UseGuards(JwtAuthGuard)
@@ -40,18 +42,24 @@ export class ContactRequestsController {
 
   // Admin xem tất cả
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getAll(@Query('status') status?: string) {
     return this.service.findAll(status);
   }
 
   // Admin xem stats
   @Get('stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getStats() {
     return this.service.getStats();
   }
 
   // Admin reply
   @Patch(':id/reply')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async reply(
     @Param('id') id: string,
     @Request() req: any,
@@ -66,6 +74,8 @@ export class ContactRequestsController {
 
   // Admin đổi status
   @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async updateStatus(
     @Param('id') id: string,
     @Body() body: { status: string },

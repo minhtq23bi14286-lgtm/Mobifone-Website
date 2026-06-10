@@ -36,7 +36,7 @@ const isProduction = process.env.NODE_ENV === 'production';
           }
       ),
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true,
+      synchronize: process.env.NODE_ENV !== 'production',
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),

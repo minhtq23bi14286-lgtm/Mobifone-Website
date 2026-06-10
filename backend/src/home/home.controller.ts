@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Request, UseGuards } from '@nestjs/common';
 import { HomeService } from './home.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { UsersService } from '../users/users.service';
@@ -35,7 +37,8 @@ export class HomeController {
   getAnnouncements() { return this.homeService.getAnnouncements(); }
 
   @Post('announcements')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async createAnnouncement(@Request() req: any, @Body() body: any) {
     const announcement = await this.homeService.createAnnouncement({ ...body, createdBy: req.user.sub });
 
@@ -49,13 +52,15 @@ export class HomeController {
   }
 
   @Patch('announcements/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   updateAnnouncement(@Param('id') id: string, @Body() body: any) {
     return this.homeService.updateAnnouncement(Number(id), body);
   }
 
   @Delete('announcements/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   deleteAnnouncement(@Param('id') id: string) {
     return this.homeService.deleteAnnouncement(Number(id));
   }
@@ -66,7 +71,8 @@ export class HomeController {
   getEvents() { return this.homeService.getEvents(); }
 
   @Post('events')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async createEvent(@Request() req: any, @Body() body: any) {
     const event = await this.homeService.createEvent({ ...body, createdBy: req.user.sub });
 
@@ -81,13 +87,15 @@ export class HomeController {
   }
 
   @Patch('events/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   updateEvent(@Param('id') id: string, @Body() body: any) {
     return this.homeService.updateEvent(Number(id), body);
   }
 
   @Delete('events/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   deleteEvent(@Param('id') id: string) {
     return this.homeService.deleteEvent(Number(id));
   }
@@ -98,7 +106,8 @@ export class HomeController {
   getDepartmentNews() { return this.homeService.getDepartmentNews(); }
 
   @Post('news')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async createDepartmentNews(@Request() req: any, @Body() body: any) {
     const news = await this.homeService.createDepartmentNews({ ...body, createdBy: req.user.sub });
 
@@ -113,13 +122,15 @@ export class HomeController {
   }
 
   @Patch('news/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   updateDepartmentNews(@Param('id') id: string, @Body() body: any) {
     return this.homeService.updateDepartmentNews(Number(id), body);
   }
 
   @Delete('news/:id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   deleteDepartmentNews(@Param('id') id: string) {
     return this.homeService.deleteDepartmentNews(Number(id));
   }
