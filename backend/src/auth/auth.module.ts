@@ -13,9 +13,11 @@ import { getJwtSecret } from './jwt-secret';
     UsersModule,
     SecurityModule,
     PassportModule,
-    JwtModule.register({
-      secret: getJwtSecret(),
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   providers: [AuthService, JwtStrategy],

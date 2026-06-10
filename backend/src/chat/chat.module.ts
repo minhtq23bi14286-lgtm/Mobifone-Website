@@ -14,9 +14,11 @@ import { getJwtSecret } from '../auth/jwt-secret';
     TypeOrmModule.forFeature([Message]),
     UsersModule,
     NotificationsModule,
-    JwtModule.register({
-      secret: getJwtSecret(),
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   providers: [ChatService, ChatGateway],
