@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Post, PostStatus } from './post.entity';
 import { Comment } from './comment.entity';
+import { PostLike } from './post-like.entity';
 
 @Injectable()
 export class PostsService {
@@ -11,6 +12,8 @@ export class PostsService {
     private postRepository: Repository<Post>,
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
+    @InjectRepository(PostLike)
+    private postLikeRepository: Repository<PostLike>,
   ) {}
 
   async createPost(userId: number, title: string, content: string, category: string, attachments: string[]): Promise<Post> {
@@ -18,7 +21,7 @@ export class PostsService {
     return this.postRepository.save(post);
   }
 
-  async getPosts(category?: string): Promise<any[]> {
+  async getPosts(category?: string, userId?: number): Promise<any[]> {
     const query = this.postRepository
       .createQueryBuilder('post')
       .leftJoin('users', 'u', 'u.id = post.userId')
@@ -26,12 +29,25 @@ export class PostsService {
       .where('post.status = :status', { status: 'approved' });
     if (category && category !== 'all') query.andWhere('post.category = :category', { category });
     const posts = await query.orderBy('post.createdAt', 'DESC').getRawMany();
-    return posts.map(p => ({
+    
+    const result = posts.map(p => ({
       id: p.post_id, userId: p.post_userId, title: p.post_title, content: p.post_content,
       category: p.post_category, attachments: p.post_attachments, likes: p.post_likes,
       comments: p.post_comments, views: p.post_views, status: p.post_status,
       createdAt: p.post_createdAt, authorName: p.u_displayName || 'Người dùng', authorRole: p.u_role || 'employee',
     }));
+
+    // Nếu có userId, thêm info userLiked cho mỗi post
+    if (userId) {
+      const userLikes = await this.postLikeRepository.find({ where: { userId } });
+      const likedPostIds = new Set(userLikes.map(l => l.postId));
+      return result.map(post => ({
+        ...post,
+        userLiked: likedPostIds.has(post.id),
+      }));
+    }
+
+    return result;
   }
 
   async getMyPosts(userId: number): Promise<Post[]> {
@@ -90,14 +106,34 @@ export class PostsService {
     return (result.affected ?? 0) > 0;
   }
 
-  async likePost(id: number): Promise<void> {
-    const post = await this.postRepository.findOne({ where: { id } });
-    if (post) await this.postRepository.update(id, { likes: post.likes + 1 });
+  // ── FIXED: Like/Unlike tracking per user ──────────────────────────
+  async likePost(postId: number, userId: number): Promise<{ liked: boolean; likes: number }> {
+    // Check nếu user đã like post này rồi
+    const existingLike = await this.postLikeRepository.findOne({
+      where: { postId, userId },
+    });
+
+    const post = await this.postRepository.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Không tìm thấy bài viết');
+
+    if (existingLike) {
+      // User đã like rồi → Unlike
+      await this.postLikeRepository.delete(existingLike.id);
+      await this.postRepository.update(postId, { likes: Math.max(0, post.likes - 1) });
+      return { liked: false, likes: Math.max(0, post.likes - 1) };
+    } else {
+      // User chưa like → Like
+      await this.postLikeRepository.save({ postId, userId });
+      await this.postRepository.update(postId, { likes: post.likes + 1 });
+      return { liked: true, likes: post.likes + 1 };
+    }
   }
 
   async deletePost(id: number, userId: number): Promise<boolean> {
     const post = await this.postRepository.findOne({ where: { id, userId } });
     if (!post) return false;
+    // Xóa luôn tất cả likes của post này
+    await this.postLikeRepository.delete({ postId: id });
     await this.postRepository.delete(id);
     return true;
   }

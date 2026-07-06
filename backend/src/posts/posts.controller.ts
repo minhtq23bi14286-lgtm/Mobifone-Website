@@ -24,8 +24,9 @@ export class PostsController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async getPosts(@Query('category') category?: string) {
-    return this.postsService.getPosts(category);
+  async getPosts(@Request() req: any, @Query('category') category?: string) {
+    // Truyền userId để biết post nào user đã like
+    return this.postsService.getPosts(category, req.user.sub);
   }
 
   @Get('my')
@@ -78,11 +79,12 @@ export class PostsController {
     return this.postsService.createPost(req.user.sub, body.title, body.content, body.category, attachments);
   }
 
+  // ── FIXED: Like endpoint now tracks per user ──────────────────────
   @Patch(':id/like')
   @UseGuards(JwtAuthGuard)
-  async likePost(@Param('id') id: string) {
-    await this.postsService.likePost(Number(id));
-    return { success: true };
+  async likePost(@Param('id') id: string, @Request() req: any) {
+    const result = await this.postsService.likePost(Number(id), req.user.sub);
+    return result;
   }
 
   @Delete(':id')

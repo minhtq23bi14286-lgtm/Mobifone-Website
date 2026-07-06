@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  ThumbsUp, MessageCircle, Share2, Bookmark, X, Upload,
+  ThumbsUp, MessageCircle, Bookmark, X, Upload,
   File, Image, FileText, Trash2, PenSquare, TrendingUp, Clock,
   Flame, Filter, Eye, Hash, Users, BarChart2, ArrowLeft,
   Send, ChevronLeft, ChevronRight, Pencil, Check,
@@ -504,9 +504,9 @@ export default function Forum() {
           </div>
         </div>
 
-        {/* ── Col 3: Preview + Comments ── */}
+        {/* ── Col 3: Preview + Comments (COMPACT WIDTH: w-72) ── */}
         {selectedPost && (
-          <div className={`flex-1 overflow-y-auto flex flex-col ${panelBg}`}>
+          <div className={`w-80 flex-shrink-0 overflow-y-auto flex flex-col border-l ${panelBg} ${border}`}>
             <div className={`h-1.5 bg-gradient-to-r ${POST_COLORS[previewColorIndex]}`} />
             <div className={`sticky top-0 z-10 px-4 py-3 border-b flex items-center gap-2 ${panelBg} ${border}`}>
               <button onClick={() => setSelectedPost(null)} className={`p-1.5 rounded-lg transition-colors ${hoverBg} ${textSub}`}>
@@ -555,53 +555,37 @@ export default function Forum() {
                 <button onClick={() => toggleLike(selectedPost.id)}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all flex-1 justify-center ${liked.includes(selectedPost.id) ? "bg-[#1F4E79]/10 text-[#1F4E79]" : `border ${border} ${textSub} ${hoverBg}`}`}>
                   <ThumbsUp className={`w-4 h-4 ${liked.includes(selectedPost.id) ? "fill-[#1F4E79]" : ""}`} />
-                  {selectedPost.likes + (liked.includes(selectedPost.id) ? 1 : 0)} Thích
+                  {selectedPost.likes + (liked.includes(selectedPost.id) ? 1 : 0)}
                 </button>
                 <button onClick={() => setSaved(prev => prev.includes(selectedPost.id) ? prev.filter(i => i !== selectedPost.id) : [...prev, selectedPost.id])}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all flex-1 justify-center ${saved.includes(selectedPost.id) ? "bg-[#1F4E79]/10 text-[#1F4E79]" : `border ${border} ${textSub} ${hoverBg}`}`}>
                   <Bookmark className={`w-4 h-4 ${saved.includes(selectedPost.id) ? "fill-[#1F4E79]" : ""}`} />
                   {saved.includes(selectedPost.id) ? "Đã lưu" : "Lưu"}
                 </button>
-                <button className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${border} ${textSub} ${hoverBg}`}>
-                  <Share2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className={`flex gap-4 py-3 px-4 rounded-xl ${darkMode ? "bg-white/5" : "bg-gray-50"}`}>
-                {[
-                  { icon: ThumbsUp, value: selectedPost.likes, label: "lượt thích" },
-                  { icon: MessageCircle, value: comments.length, label: "bình luận" },
-                  { icon: Eye, value: selectedPost.views || 0, label: "lượt xem" },
-                ].map(item => (
-                  <div key={item.label} className="flex-1 text-center">
-                    <p className={`text-lg font-bold ${textMain}`}>{item.value}</p>
-                    <p className={`text-[10px] ${textSub}`}>{item.label}</p>
-                  </div>
-                ))}
               </div>
 
               {/* ── Comments Section (with ref for auto-scroll) ── */}
               <div ref={commentSectionRef} className={`border-t pt-4 ${border}`}>
-                <p className={`text-sm font-bold mb-3 flex items-center gap-2 ${textMain}`}>
-                  <MessageCircle className="w-4 h-4 text-[#1F4E79]" />
+                <p className={`text-xs font-bold mb-3 flex items-center gap-2 ${textMain}`}>
+                  <MessageCircle className="w-3.5 h-3.5 text-[#1F4E79]" />
                   Bình luận ({comments.length})
                 </p>
 
                 {/* Input */}
                 <div className="flex items-start gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-xs font-bold">{currentUser.displayName?.charAt(0) || "U"}</span>
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-[10px] font-bold">{currentUser.displayName?.charAt(0) || "U"}</span>
                   </div>
-                  <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-1.5">
                     <input type="text" placeholder="Viết bình luận..." value={commentText}
                       onChange={e => setCommentText(e.target.value)}
                       onKeyDown={e => e.key === "Enter" && !e.shiftKey && handlePostComment()}
-                      className={`flex-1 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:border-[#1F4E79] transition-colors ${inputBg}`} />
+                      className={`flex-1 px-2.5 py-1.5 rounded-xl border text-xs focus:outline-none focus:border-[#1F4E79] transition-colors ${inputBg}`} />
                     <button onClick={handlePostComment} disabled={!commentText.trim() || isPostingComment}
-                      className="w-8 h-8 bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] rounded-full flex items-center justify-center hover:opacity-90 transition-all disabled:opacity-40 flex-shrink-0">
+                      className="w-7 h-7 bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] rounded-full flex items-center justify-center hover:opacity-90 transition-all disabled:opacity-40 flex-shrink-0">
                       {isPostingComment
-                        ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        : <Send className="w-3.5 h-3.5 text-white" />}
+                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        : <Send className="w-2.5 h-2.5 text-white" />}
                     </button>
                   </div>
                 </div>
@@ -609,54 +593,54 @@ export default function Forum() {
                 {/* Comment list */}
                 {loadingComments ? (
                   <div className="flex justify-center py-4">
-                    <div className="w-5 h-5 border-2 border-[#1F4E79] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-[#1F4E79] border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : comments.length === 0 ? (
-                  <p className={`text-xs text-center py-4 ${textSub}`}>Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+                  <p className={`text-xs text-center py-4 ${textSub}`}>Chưa có bình luận nào</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {comments.map(comment => (
                       <div key={comment.id} id={`comment-${comment.id}`}
                         className="flex items-start gap-2 group">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center flex-shrink-0">
-                          <span className="text-white text-[10px] font-bold">{comment.authorName?.charAt(0) || "U"}</span>
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-[9px] font-bold">{comment.authorName?.charAt(0) || "U"}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           {editingComment?.id === comment.id ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <input type="text" value={editingComment.content}
                                 onChange={e => setEditingComment(prev => prev ? { ...prev, content: e.target.value } : null)}
                                 onKeyDown={e => { if (e.key === "Enter") handleEditComment(); if (e.key === "Escape") setEditingComment(null); }}
-                                className={`flex-1 px-3 py-2 rounded-xl border text-sm focus:outline-none focus:border-[#1F4E79] ${inputBg}`}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs focus:outline-none focus:border-[#1F4E79] ${inputBg}`}
                                 autoFocus />
-                              <button onClick={handleEditComment} className="p-1.5 bg-[#1F4E79] rounded-lg text-white hover:bg-[#2E75B6] transition-colors">
-                                <Check className="w-3.5 h-3.5" />
+                              <button onClick={handleEditComment} className="p-1 bg-[#1F4E79] rounded-lg text-white hover:bg-[#2E75B6] transition-colors">
+                                <Check className="w-2.5 h-2.5" />
                               </button>
-                              <button onClick={() => setEditingComment(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
-                                <X className="w-3.5 h-3.5" />
+                              <button onClick={() => setEditingComment(null)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+                                <X className="w-2.5 h-2.5" />
                               </button>
                             </div>
                           ) : (
-                            <div className={`px-3 py-2 rounded-xl text-sm transition-all duration-500 ${
+                            <div className={`px-2.5 py-1.5 rounded-lg text-xs transition-all duration-500 ${
                               highlightedCommentId === comment.id
                                 ? "ring-2 ring-[#2E75B6] bg-blue-50 shadow-md shadow-blue-200/50"
                                 : darkMode ? "bg-white/5" : "bg-gray-100"
                             }`}>
                               <p className={`text-xs font-semibold mb-0.5 ${textMain}`}>{comment.authorName || "Người dùng"}</p>
-                              <p className={`text-sm leading-relaxed ${textMain}`}>{comment.content}</p>
+                              <p className={`text-xs leading-relaxed ${textMain}`}>{comment.content}</p>
                             </div>
                           )}
-                          <p className={`text-[10px] mt-1 ml-1 ${textSub}`}>{formatTime(comment.createdAt)}</p>
+                          <p className={`text-[9px] mt-1 ml-1 ${textSub}`}>{formatTime(comment.createdAt)}</p>
                         </div>
                         {comment.userId === currentUser.id && editingComment?.id !== comment.id && (
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
                             <button onClick={() => setEditingComment({ id: comment.id, content: comment.content })}
-                              className="p-1 text-gray-400 hover:text-[#1F4E79] hover:bg-blue-50 rounded-lg transition-colors">
-                              <Pencil className="w-3.5 h-3.5" />
+                              className="p-0.5 text-gray-400 hover:text-[#1F4E79] hover:bg-blue-50 rounded-lg transition-colors">
+                              <Pencil className="w-2.5 h-2.5" />
                             </button>
                             <button onClick={() => handleDeleteComment(comment.id, selectedPost.id)}
-                              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" />
+                              className="p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                              <Trash2 className="w-2.5 h-2.5" />
                             </button>
                           </div>
                         )}
@@ -668,8 +652,8 @@ export default function Forum() {
 
               {selectedPost.userId === currentUser.id && (
                 <button onClick={() => handleDeletePost(selectedPost.id)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-200 text-red-500 text-sm font-medium rounded-xl hover:bg-red-50 transition-colors">
-                  <Trash2 className="w-4 h-4" /> Xóa bài viết
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-200 text-red-500 text-xs font-medium rounded-xl hover:bg-red-50 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Xóa bài viết
                 </button>
               )}
             </div>
