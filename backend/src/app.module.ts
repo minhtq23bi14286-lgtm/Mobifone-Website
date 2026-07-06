@@ -13,7 +13,8 @@ import { AdminModule } from './admin/admin.module';
 import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
 import { HomeModule } from './home/home.module';
-
+import { NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { LoggingMiddleware } from './common/logging.middleware';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -54,4 +55,9 @@ const isProduction = process.env.NODE_ENV === 'production';
     HomeModule,
   ],
 })
-export class AppModule {}
+
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggingMiddleware).forRoutes('*');
+  }
+}
