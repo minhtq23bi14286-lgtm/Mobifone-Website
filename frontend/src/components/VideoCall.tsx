@@ -34,19 +34,28 @@ export default function VideoCall({
     try {
       console.log(`[${new Date().toLocaleTimeString()}] 🔄 Fetching TURN servers...`);
       const turnStart = performance.now();
-      const res = await fetch(METERED_API_URL);
+      
+      // Add 5s timeout for TURN fetch - if takes longer, use STUN fallback for local network
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      
+      const res = await fetch(METERED_API_URL, { signal: controller.signal });
+      clearTimeout(timeout);
+      
       if (res.ok) {
         const servers = await res.json();
         console.log(`[${new Date().toLocaleTimeString()}] ✅ TURN loaded (${(performance.now() - turnStart).toFixed(0)}ms): ${servers.length} servers`);
         return servers;
       }
     } catch (err) {
-      console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ TURN fetch failed:`, err);
+      console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ TURN fetch failed (${err instanceof Error ? err.message : 'unknown error'})`);
     }
-    console.log(`[${new Date().toLocaleTimeString()}] 📡 Using STUN fallback`);
+    console.log(`[${new Date().toLocaleTimeString()}] 📡 Using STUN fallback - good for local network!`);
     return [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun3.l.google.com:19302" },
+      { urls: "stun:stun4.l.google.com:19302" },
     ];
   };
 
@@ -115,7 +124,12 @@ export default function VideoCall({
         localVideoRef.current.play().catch(() => {});
       }
 
-      const pc = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: "all" });
+      // ✅ "all" policy = allow both STUN (local P2P) + TURN (internet), no preference
+      const pc = new RTCPeerConnection({ 
+        iceServers: servers, 
+        iceTransportPolicy: "all",
+        iceCandidatePoolSize: 10,
+      });
       peerRef.current = pc;
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
