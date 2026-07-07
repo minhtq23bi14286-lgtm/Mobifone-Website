@@ -26,12 +26,22 @@ export default function VideoCall({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerRef        = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
-  const remoteDescSet  = useRef(false);
-  const hasRemoteStream = useRef(false);
-  const callEnded      = useRef(false);
 
-  // ── ICE Servers: Metered TURN + Google STUN fallback ──
+  // Incoming ICE candidates buffered until remote description is set
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  const remoteDescSet     = useRef(false);
+
+  // ⭐ KEY FIX: Outgoing ICE candidates buffered until peer is READY to receive them.
+  // - Receiver (isIncoming): caller's VideoCall is already mounted → send immediately.
+  // - Caller: receiver's VideoCall only mounts AFTER they press Accept.
+  //   If we emit candidates before that, they are LOST (no listener on receiver side).
+  //   So the caller queues candidates and flushes them when "callAccepted" arrives.
+  const peerReady          = useRef(isIncoming);
+  const outgoingCandidates = useRef<RTCIceCandidateInit[]>([]);
+
+  const callEnded = useRef(false);
+
+  // ── ICE Servers: Metered TURN + Google STUN ──
   const fetchIceServers = async (): Promise<RTCIceServer[]> => {
     const fallbackServers: RTCIceServer[] = [
       { urls: "stun:stun.l.google.com:19302" },
@@ -39,7 +49,6 @@ export default function VideoCall({
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
     ];
-
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
@@ -48,7 +57,6 @@ export default function VideoCall({
       if (res.ok) {
         const servers = await res.json();
         console.log(`[TURN] Loaded ${servers.length} Metered servers`);
-        // Combine: Metered TURN + Google STUN
         return [...servers, ...fallbackServers];
       }
     } catch (err) {
@@ -57,65 +65,64 @@ export default function VideoCall({
     return fallbackServers;
   };
 
-  // ── Set remote description and flush pending ICE candidates ──
+  const sendCandidate = (candidate: RTCIceCandidateInit) => {
+    socket.emit("iceCandidate", { receiverId: contact.id, candidate });
+  };
+
+  const flushOutgoingCandidates = () => {
+    if (outgoingCandidates.current.length > 0) {
+      console.log(`[ICE] Flushing ${outgoingCandidates.current.length} buffered outgoing candidates`);
+      outgoingCandidates.current.forEach(sendCandidate);
+      outgoingCandidates.current = [];
+    }
+  };
+
   const setRemoteDescAndFlush = async (pc: RTCPeerConnection, signal: any) => {
-    if (pc.signalingState === "closed") return;
-    
-    // Avoid setting remote description twice
-    if (remoteDescSet.current) return;
-    
+    if (pc.signalingState === "closed" || remoteDescSet.current) return;
     await pc.setRemoteDescription(new RTCSessionDescription(signal));
     remoteDescSet.current = true;
-    console.log(`[SDP] Remote description set, flushing ${pendingCandidates.current.length} pending candidates`);
-    
+    console.log(`[SDP] Remote description set, adding ${pendingCandidates.current.length} pending candidates`);
     for (const c of pendingCandidates.current) {
       try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
     }
     pendingCandidates.current = [];
   };
 
-  // ── Attach remote stream to video element ──
+  // ── Attach remote stream (⭐ audio fix: always re-attach, no guard) ──
   const attachRemoteStream = (stream: MediaStream) => {
-    if (!remoteVideoRef.current || hasRemoteStream.current) return;
-    
-    console.log(`[VIDEO] Attaching remote stream (${stream.getTracks().map(t => t.kind).join(", ")})`);
-    remoteVideoRef.current.srcObject = stream;
-    hasRemoteStream.current = true;
-
+    const el = remoteVideoRef.current;
+    if (!el) return;
+    if (el.srcObject !== stream) {
+      console.log(`[VIDEO] Attaching remote stream (${stream.getTracks().map(t => t.kind).join(", ")})`);
+      el.srcObject = stream;
+    }
+    el.volume = 1.0;
     const tryPlay = () => {
-      remoteVideoRef.current?.play().catch(() => {
-        // Autoplay blocked - retry on user interaction
-        setTimeout(tryPlay, 500);
-      });
+      el.play().catch(() => setTimeout(tryPlay, 500));
     };
-    
-    remoteVideoRef.current.onloadedmetadata = () => {
-      console.log("[VIDEO] Remote metadata loaded, playing");
-      tryPlay();
-    };
+    el.onloadedmetadata = tryPlay;
     tryPlay();
   };
 
-  // ── Main useEffect ──
   useEffect(() => {
     callEnded.current = false;
     fetchIceServers().then(startCall);
 
-    // Caller receives answer from receiver
     const onCallAccepted = async ({ signal }: { signal: any }) => {
       console.log("[SIGNAL] callAccepted received");
       const pc = peerRef.current;
       if (!pc || pc.signalingState === "closed") return;
       await setRemoteDescAndFlush(pc, signal);
+      // ⭐ Receiver has mounted VideoCall — now safe to send buffered candidates
+      peerReady.current = true;
+      flushOutgoingCandidates();
       setCallStatus("connected");
     };
 
-    // ICE candidates from remote peer
     const onIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       if (!candidate) return;
       const pc = peerRef.current;
       if (!pc || pc.signalingState === "closed") return;
-      
       if (remoteDescSet.current) {
         try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
       } else {
@@ -123,18 +130,18 @@ export default function VideoCall({
       }
     };
 
-    const onCallRejected = () => { 
+    const onCallRejected = () => {
       if (callEnded.current) return;
       callEnded.current = true;
-      setCallStatus("ended"); 
-      setTimeout(onClose, 1500); 
+      setCallStatus("ended");
+      setTimeout(onClose, 1500);
     };
-    
-    const onCallEnded = () => { 
+
+    const onCallEnded = () => {
       if (callEnded.current) return;
       callEnded.current = true;
-      setCallStatus("ended"); 
-      setTimeout(onClose, 1500); 
+      setCallStatus("ended");
+      setTimeout(onClose, 1500);
     };
 
     socket.on("callAccepted", onCallAccepted);
@@ -151,12 +158,9 @@ export default function VideoCall({
     };
   }, []);
 
-  // ── Start call ──
   const startCall = async (servers: RTCIceServer[]) => {
     if (callEnded.current) return;
-    
     try {
-      // 1. Get local media
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -170,7 +174,6 @@ export default function VideoCall({
         localVideoRef.current.play().catch(() => {});
       }
 
-      // 2. Create peer connection
       const pc = new RTCPeerConnection({
         iceServers: servers,
         iceTransportPolicy: "all",
@@ -178,10 +181,8 @@ export default function VideoCall({
       });
       peerRef.current = pc;
 
-      // 3. Add local tracks
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      // 4. Handle remote tracks
       pc.ontrack = (event) => {
         console.log(`[TRACK] ontrack: ${event.track.kind}, streams: ${event.streams.length}`);
         if (event.streams[0]) {
@@ -190,34 +191,39 @@ export default function VideoCall({
         }
       };
 
-      // 5. Send ICE candidates to remote peer
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          const c = event.candidate.candidate;
-          const type = c.includes("relay") ? "TURN" : c.includes("srflx") ? "STUN" : "host";
-          console.log(`[ICE] Candidate: ${type}`);
-          socket.emit("iceCandidate", { receiverId: contact.id, candidate: event.candidate.toJSON() });
+        if (!event.candidate) {
+          console.log("[ICE] Gathering complete");
+          return;
+        }
+        const c = event.candidate.candidate;
+        const type = c.includes("relay") ? "TURN" : c.includes("srflx") ? "STUN" : "host";
+        const json = event.candidate.toJSON();
+
+        if (peerReady.current) {
+          console.log(`[ICE] Candidate sent: ${type}`);
+          sendCandidate(json);
+        } else {
+          // ⭐ Caller: receiver hasn't accepted yet → buffer
+          console.log(`[ICE] Candidate buffered: ${type}`);
+          outgoingCandidates.current.push(json);
         }
       };
 
-      // 6. ICE connection state changes
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
         console.log(`[ICE] State: ${state}`);
-        
         if (state === "connected" || state === "completed") {
           setCallStatus("connected");
         } else if (state === "failed") {
           console.warn("[ICE] Failed, restarting...");
           pc.restartIce();
         } else if (state === "disconnected") {
-          // Wait 15s then retry, don't end immediately
           setTimeout(() => {
             if (callEnded.current) return;
             if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
               console.warn("[ICE] Still disconnected, restarting...");
               pc.restartIce();
-              // Final timeout
               setTimeout(() => {
                 if (callEnded.current) return;
                 if (pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
@@ -250,7 +256,6 @@ export default function VideoCall({
         }
       };
 
-      // 7. Create offer (caller) or answer (receiver)
       if (isIncoming && incomingSignal) {
         console.log("[CALL] Incoming: setting remote desc + creating answer");
         await setRemoteDescAndFlush(pc, incomingSignal);
@@ -263,7 +268,7 @@ export default function VideoCall({
         const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
         socket.emit("callUser", { receiverId: contact.id, signal: offer });
-        console.log("[CALL] Offer sent to receiver");
+        console.log("[CALL] Offer sent to receiver (ICE candidates buffered until accept)");
       }
     } catch (err) {
       console.error("[CALL] Init error:", err);
@@ -275,15 +280,14 @@ export default function VideoCall({
     }
   };
 
-  // ── Cleanup ──
   const cleanup = () => {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     peerRef.current?.close();
     peerRef.current = null;
     localStreamRef.current = null;
     remoteDescSet.current = false;
-    hasRemoteStream.current = false;
     pendingCandidates.current = [];
+    outgoingCandidates.current = [];
   };
 
   const endCall = () => {
