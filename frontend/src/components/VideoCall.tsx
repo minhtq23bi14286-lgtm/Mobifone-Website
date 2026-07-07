@@ -21,7 +21,6 @@ export default function VideoCall({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [remoteStreamLoaded, setRemoteStreamLoaded] = useState(false);
 
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -29,93 +28,140 @@ export default function VideoCall({
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSet  = useRef(false);
+  const hasRemoteStream = useRef(false);
+  const callEnded      = useRef(false);
 
+  // ── ICE Servers: Metered TURN + Google STUN fallback ──
   const fetchIceServers = async (): Promise<RTCIceServer[]> => {
-    try {
-      console.log(`[${new Date().toLocaleTimeString()}] 🔄 Fetching TURN servers...`);
-      const turnStart = performance.now();
-      
-      // Add 5s timeout for TURN fetch - if takes longer, use STUN fallback for local network
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      
-      const res = await fetch(METERED_API_URL, { signal: controller.signal });
-      clearTimeout(timeout);
-      
-      if (res.ok) {
-        const servers = await res.json();
-        console.log(`[${new Date().toLocaleTimeString()}] ✅ TURN loaded (${(performance.now() - turnStart).toFixed(0)}ms): ${servers.length} servers`);
-        return servers;
-      }
-    } catch (err) {
-      console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ TURN fetch failed (${err instanceof Error ? err.message : 'unknown error'})`);
-    }
-    console.log(`[${new Date().toLocaleTimeString()}] 📡 Using STUN fallback - good for local network!`);
-    return [
+    const fallbackServers: RTCIceServer[] = [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
     ];
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(METERED_API_URL, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const servers = await res.json();
+        console.log(`[TURN] Loaded ${servers.length} Metered servers`);
+        // Combine: Metered TURN + Google STUN
+        return [...servers, ...fallbackServers];
+      }
+    } catch (err) {
+      console.warn("[TURN] Fetch failed, using STUN only:", err);
+    }
+    return fallbackServers;
   };
 
+  // ── Set remote description and flush pending ICE candidates ──
   const setRemoteDescAndFlush = async (pc: RTCPeerConnection, signal: any) => {
+    if (pc.signalingState === "closed") return;
+    
+    // Avoid setting remote description twice
+    if (remoteDescSet.current) return;
+    
     await pc.setRemoteDescription(new RTCSessionDescription(signal));
     remoteDescSet.current = true;
+    console.log(`[SDP] Remote description set, flushing ${pendingCandidates.current.length} pending candidates`);
+    
     for (const c of pendingCandidates.current) {
       try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
     }
     pendingCandidates.current = [];
   };
 
+  // ── Attach remote stream to video element ──
+  const attachRemoteStream = (stream: MediaStream) => {
+    if (!remoteVideoRef.current || hasRemoteStream.current) return;
+    
+    console.log(`[VIDEO] Attaching remote stream (${stream.getTracks().map(t => t.kind).join(", ")})`);
+    remoteVideoRef.current.srcObject = stream;
+    hasRemoteStream.current = true;
+
+    const tryPlay = () => {
+      remoteVideoRef.current?.play().catch(() => {
+        // Autoplay blocked - retry on user interaction
+        setTimeout(tryPlay, 500);
+      });
+    };
+    
+    remoteVideoRef.current.onloadedmetadata = () => {
+      console.log("[VIDEO] Remote metadata loaded, playing");
+      tryPlay();
+    };
+    tryPlay();
+  };
+
+  // ── Main useEffect ──
   useEffect(() => {
+    callEnded.current = false;
     fetchIceServers().then(startCall);
 
-    socket.on("callAccepted", async ({ signal }: { signal: any }) => {
+    // Caller receives answer from receiver
+    const onCallAccepted = async ({ signal }: { signal: any }) => {
+      console.log("[SIGNAL] callAccepted received");
       const pc = peerRef.current;
-      if (!pc) return;
-      console.log(`[${new Date().toLocaleTimeString()}] 📞 Call accepted! Setting remote description`);
-      const acceptStart = performance.now();
+      if (!pc || pc.signalingState === "closed") return;
       await setRemoteDescAndFlush(pc, signal);
-      console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote description set (${(performance.now() - acceptStart).toFixed(0)}ms)`);
       setCallStatus("connected");
-    });
+    };
 
-    socket.on("iceCandidate", async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+    // ICE candidates from remote peer
+    const onIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       if (!candidate) return;
       const pc = peerRef.current;
-      if (!pc) return;
+      if (!pc || pc.signalingState === "closed") return;
+      
       if (remoteDescSet.current) {
         try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
       } else {
         pendingCandidates.current.push(candidate);
       }
-    });
+    };
 
-    socket.on("callRejected", () => { setCallStatus("ended"); setTimeout(onClose, 1500); });
-    socket.on("callEnded",    () => { setCallStatus("ended"); setTimeout(onClose, 1500); });
+    const onCallRejected = () => { 
+      if (callEnded.current) return;
+      callEnded.current = true;
+      setCallStatus("ended"); 
+      setTimeout(onClose, 1500); 
+    };
+    
+    const onCallEnded = () => { 
+      if (callEnded.current) return;
+      callEnded.current = true;
+      setCallStatus("ended"); 
+      setTimeout(onClose, 1500); 
+    };
+
+    socket.on("callAccepted", onCallAccepted);
+    socket.on("iceCandidate", onIceCandidate);
+    socket.on("callRejected", onCallRejected);
+    socket.on("callEnded", onCallEnded);
 
     return () => {
-      socket.off("callAccepted");
-      socket.off("iceCandidate");
-      socket.off("callRejected");
-      socket.off("callEnded");
+      socket.off("callAccepted", onCallAccepted);
+      socket.off("iceCandidate", onIceCandidate);
+      socket.off("callRejected", onCallRejected);
+      socket.off("callEnded", onCallEnded);
       cleanup();
     };
   }, []);
 
+  // ── Start call ──
   const startCall = async (servers: RTCIceServer[]) => {
-    const callStartTime = performance.now();
+    if (callEnded.current) return;
+    
     try {
-      console.log(`[${new Date().toLocaleTimeString()}] 🎬 Call init started`);
-      
+      // 1. Get local media
       let stream: MediaStream;
       try {
-        const mediaStart = performance.now();
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        console.log(`[${new Date().toLocaleTimeString()}] 📷 getUserMedia took ${(performance.now() - mediaStart).toFixed(0)}ms`);
       } catch {
-        console.warn("Camera unavailable, audio only");
+        console.warn("[MEDIA] Camera unavailable, audio only");
         stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
       }
       localStreamRef.current = stream;
@@ -124,117 +170,124 @@ export default function VideoCall({
         localVideoRef.current.play().catch(() => {});
       }
 
-      // ✅ "all" policy = allow both STUN (local P2P) + TURN (internet), no preference
-      const pc = new RTCPeerConnection({ 
-        iceServers: servers, 
+      // 2. Create peer connection
+      const pc = new RTCPeerConnection({
+        iceServers: servers,
         iceTransportPolicy: "all",
         iceCandidatePoolSize: 10,
       });
       peerRef.current = pc;
 
+      // 3. Add local tracks
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
-      console.log(`[${new Date().toLocaleTimeString()}] 🔌 Added local tracks`);
 
-      // ✅ FIX: Handle ALL track types - set remote stream on FIRST track (audio or video)
+      // 4. Handle remote tracks
       pc.ontrack = (event) => {
-        console.log(`[${new Date().toLocaleTimeString()}] 📺 ontrack fired, kind: ${event.track.kind}, streams: ${event.streams.length}`);
-        
-        const remoteStream = event.streams[0];
-        if (!remoteStream || !remoteVideoRef.current) return;
-
-        // Always set the remote stream (it contains both audio + video tracks)
-        remoteVideoRef.current.srcObject = remoteStream;
-        console.log(`[${new Date().toLocaleTimeString()}] 🎥 Remote stream set (tracks: ${remoteStream.getTracks().map(t => t.kind).join(', ')})`);
-
-        // Try to play immediately
-        remoteVideoRef.current.onloadedmetadata = () => {
-          console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote video metadata loaded, playing`);
-          remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
-        };
-
-        // Also try play directly (some browsers need this)
-        remoteVideoRef.current.play().catch(() => {});
-
-        setRemoteStreamLoaded(true);
-        setCallStatus("connected");
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit("iceCandidate", {
-            receiverId: contact.id,
-            candidate: event.candidate.toJSON(),
-          });
+        console.log(`[TRACK] ontrack: ${event.track.kind}, streams: ${event.streams.length}`);
+        if (event.streams[0]) {
+          attachRemoteStream(event.streams[0]);
+          setCallStatus("connected");
         }
       };
 
+      // 5. Send ICE candidates to remote peer
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          const c = event.candidate.candidate;
+          const type = c.includes("relay") ? "TURN" : c.includes("srflx") ? "STUN" : "host";
+          console.log(`[ICE] Candidate: ${type}`);
+          socket.emit("iceCandidate", { receiverId: contact.id, candidate: event.candidate.toJSON() });
+        }
+      };
+
+      // 6. ICE connection state changes
       pc.oniceconnectionstatechange = () => {
-        console.log(`[${new Date().toLocaleTimeString()}] 🌐 ICE state: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-          console.log(`[${new Date().toLocaleTimeString()}] 🎉 ICE connected!`);
+        const state = pc.iceConnectionState;
+        console.log(`[ICE] State: ${state}`);
+        
+        if (state === "connected" || state === "completed") {
           setCallStatus("connected");
-        } else if (pc.iceConnectionState === "failed") {
-          console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ ICE failed — restarting ICE`);
+        } else if (state === "failed") {
+          console.warn("[ICE] Failed, restarting...");
           pc.restartIce();
-        } else if (pc.iceConnectionState === "disconnected") {
-          // Wait 5s to see if it recovers
-          console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ ICE disconnected, waiting 5s...`);
+        } else if (state === "disconnected") {
+          // Wait 15s then retry, don't end immediately
           setTimeout(() => {
-            if (pc.iceConnectionState === "disconnected") {
-              console.error("❌ ICE still disconnected after 5s, ending call");
-              setCallStatus("ended");
-              setTimeout(onClose, 2000);
+            if (callEnded.current) return;
+            if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+              console.warn("[ICE] Still disconnected, restarting...");
+              pc.restartIce();
+              // Final timeout
+              setTimeout(() => {
+                if (callEnded.current) return;
+                if (pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
+                  console.error("[ICE] Failed after retry");
+                  callEnded.current = true;
+                  setCallStatus("ended");
+                  setTimeout(onClose, 2000);
+                }
+              }, 15000);
             }
-          }, 5000);
+          }, 15000);
         }
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("🔗 Connection state:", pc.connectionState);
-        if (pc.connectionState === "connected") setCallStatus("connected");
-        if (pc.connectionState === "failed") { 
-          console.error("❌ Connection failed");
-          setCallStatus("ended"); 
-          setTimeout(onClose, 1500); 
+        console.log(`[CONN] State: ${pc.connectionState}`);
+        if (pc.connectionState === "connected") {
+          setCallStatus("connected");
+        } else if (pc.connectionState === "failed") {
+          console.warn("[CONN] Failed, restarting ICE...");
+          pc.restartIce();
+          setTimeout(() => {
+            if (callEnded.current) return;
+            if (pc.connectionState !== "connected") {
+              callEnded.current = true;
+              setCallStatus("ended");
+              setTimeout(onClose, 2000);
+            }
+          }, 15000);
         }
       };
 
+      // 7. Create offer (caller) or answer (receiver)
       if (isIncoming && incomingSignal) {
-        console.log(`[${new Date().toLocaleTimeString()}] 📥 Incoming call, setting remote description`);
-        const remoteStart = performance.now();
+        console.log("[CALL] Incoming: setting remote desc + creating answer");
         await setRemoteDescAndFlush(pc, incomingSignal);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        console.log(`[${new Date().toLocaleTimeString()}] 📨 Answer created & sent in ${(performance.now() - remoteStart).toFixed(0)}ms`);
         socket.emit("answerCall", { callerId: contact.id, signal: answer });
-        // Don't set connected yet - wait for ontrack
+        console.log("[CALL] Answer sent to caller");
       } else {
-        console.log(`[${new Date().toLocaleTimeString()}] 📤 Outgoing call, creating offer`);
-        const offerStart = performance.now();
+        console.log("[CALL] Outgoing: creating offer");
         const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
-        console.log(`[${new Date().toLocaleTimeString()}] 📤 Offer created, sending to peer... (${(performance.now() - offerStart).toFixed(0)}ms)`);
         socket.emit("callUser", { receiverId: contact.id, signal: offer });
-        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Total call init: ${(performance.now() - callStartTime).toFixed(0)}ms`);
+        console.log("[CALL] Offer sent to receiver");
       }
     } catch (err) {
-      console.error("❌ Call init error:", err);
-      setCallStatus("ended");
-      setTimeout(onClose, 2000);
+      console.error("[CALL] Init error:", err);
+      if (!callEnded.current) {
+        callEnded.current = true;
+        setCallStatus("ended");
+        setTimeout(onClose, 2000);
+      }
     }
   };
 
+  // ── Cleanup ──
   const cleanup = () => {
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     peerRef.current?.close();
     peerRef.current = null;
     localStreamRef.current = null;
     remoteDescSet.current = false;
+    hasRemoteStream.current = false;
     pendingCandidates.current = [];
-    setRemoteStreamLoaded(false);
   };
 
   const endCall = () => {
+    callEnded.current = true;
     socket.emit("endCall", { receiverId: contact.id });
     cleanup();
     onClose();
@@ -279,23 +332,23 @@ export default function VideoCall({
     }
   };
 
+  const showOverlay = callStatus !== "connected";
+
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex-1 relative overflow-hidden">
 
-        {/* Remote video - ALWAYS RENDERING (opacity controlled by CSS) */}
-        <video 
-          ref={remoteVideoRef} 
-          autoPlay 
+        {/* Remote video */}
+        <video
+          ref={remoteVideoRef}
+          autoPlay
           playsInline
           muted={false}
-          className={`w-full h-full object-cover transition-opacity duration-500 ${
-            remoteStreamLoaded || callStatus === "connected" ? "opacity-100" : "opacity-0"
-          }`}
+          className={`w-full h-full object-cover transition-opacity duration-500 ${showOverlay ? "opacity-0" : "opacity-100"}`}
         />
 
-        {/* Waiting overlay - hide when connected OR remote stream loaded */}
-        {(!remoteStreamLoaded && callStatus !== "connected") && (
+        {/* Waiting overlay */}
+        {showOverlay && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center mb-4 animate-pulse shadow-2xl">
               <span className="text-white text-4xl font-bold">{contact.displayName.charAt(0)}</span>
@@ -311,13 +364,7 @@ export default function VideoCall({
 
         {/* Local PiP */}
         <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900">
-          <video 
-            ref={localVideoRef} 
-            autoPlay 
-            muted 
-            playsInline 
-            className="w-full h-full object-cover" 
-          />
+          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
           {isVideoOff && (
             <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
               <VideoOff className="w-6 h-6 text-gray-400" />
@@ -328,7 +375,7 @@ export default function VideoCall({
         {/* Contact name */}
         <div className="absolute top-4 left-4">
           <p className="text-white font-semibold text-lg drop-shadow">{contact.displayName}</p>
-          {remoteStreamLoaded && <p className="text-green-400 text-sm">● Đang kết nối</p>}
+          {callStatus === "connected" && <p className="text-green-400 text-sm">● Đang kết nối</p>}
         </div>
       </div>
 
