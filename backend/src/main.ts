@@ -5,8 +5,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
  app.enableCors({
-  origin: ['http://localhost:5173', 'https://mobifone-website.vercel.app'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  origin: [
+    'http://localhost:5173',
+    'https://mobifone-website.vercel.app',
+  ],
   credentials: true,
 });
 

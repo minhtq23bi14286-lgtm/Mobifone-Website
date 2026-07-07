@@ -12,9 +12,14 @@ import { getJwtSecret } from '../auth/jwt-secret';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'https://mobifone-website.vercel.app'],
+    origin: [
+      'http://localhost:5173',
+      'https://mobifone-website.vercel.app',
+    ],
     credentials: true,
-  }
+    methods: ['GET', 'POST'],
+  },
+  transports: ['websocket', 'polling'],
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
