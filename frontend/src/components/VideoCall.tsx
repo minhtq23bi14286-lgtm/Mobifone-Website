@@ -21,6 +21,7 @@ export default function VideoCall({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteStreamLoaded, setRemoteStreamLoaded] = useState(false);
 
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -61,6 +62,7 @@ export default function VideoCall({
     socket.on("callAccepted", async ({ signal }: { signal: any }) => {
       const pc = peerRef.current;
       if (!pc) return;
+      console.log("📞 Call accepted, setting remote description");
       await setRemoteDescAndFlush(pc, signal);
       setCallStatus("connected");
     });
@@ -108,17 +110,27 @@ export default function VideoCall({
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
+      // ✅ FIX: Properly handle remote track - NO EARLY RETURN
       pc.ontrack = (event) => {
-        console.log("📺 ontrack fired", event.streams);
-        if (remoteVideoRef.current?.srcObject) return;
-        const remoteStream = event.streams[0];
-        if (remoteVideoRef.current && remoteStream) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.onloadedmetadata = () => {
-            remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
-          };
+        console.log("📺 ontrack fired, track kind:", event.track.kind, "streams:", event.streams.length);
+        
+        if (event.track.kind === "video") {
+          const remoteStream = event.streams[0];
+          if (remoteStream && remoteVideoRef.current) {
+            console.log("🎥 Setting remote video stream");
+            remoteVideoRef.current.srcObject = remoteStream;
+            
+            // Add loadedmetadata listener for stable playback
+            remoteVideoRef.current.onloadedmetadata = () => {
+              console.log("✅ Remote video metadata loaded, playing");
+              remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
+            };
+            
+            // Mark remote stream as loaded
+            setRemoteStreamLoaded(true);
+            setCallStatus("connected");
+          }
         }
-        setCallStatus("connected");
       };
 
       pc.onicecandidate = (event) => {
@@ -131,16 +143,17 @@ export default function VideoCall({
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log("ICE state:", pc.iceConnectionState);
+        console.log("🌐 ICE state:", pc.iceConnectionState);
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           setCallStatus("connected");
         } else if (pc.iceConnectionState === "failed") {
-          console.warn("ICE failed — restarting ICE");
+          console.warn("⚠️ ICE failed — restarting ICE");
           pc.restartIce();
         } else if (pc.iceConnectionState === "disconnected") {
-          // Chờ 5s xem có tự recover không
+          // Wait 5s to see if it recovers
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected") {
+              console.error("❌ ICE still disconnected after 5s, ending call");
               setCallStatus("ended");
               setTimeout(onClose, 2000);
             }
@@ -149,24 +162,30 @@ export default function VideoCall({
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
+        console.log("🔗 Connection state:", pc.connectionState);
         if (pc.connectionState === "connected") setCallStatus("connected");
-        if (pc.connectionState === "failed") { setCallStatus("ended"); setTimeout(onClose, 1500); }
+        if (pc.connectionState === "failed") { 
+          console.error("❌ Connection failed");
+          setCallStatus("ended"); 
+          setTimeout(onClose, 1500); 
+        }
       };
 
       if (isIncoming && incomingSignal) {
+        console.log("📥 Incoming call, setting remote description");
         await setRemoteDescAndFlush(pc, incomingSignal);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("answerCall", { callerId: contact.id, signal: answer });
-        setCallStatus("connected");
+        // Don't set connected yet - wait for ontrack
       } else {
+        console.log("📤 Outgoing call, creating offer");
         const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
         socket.emit("callUser", { receiverId: contact.id, signal: offer });
       }
     } catch (err) {
-      console.error("Lỗi khởi tạo cuộc gọi:", err);
+      console.error("❌ Call init error:", err);
       setCallStatus("ended");
       setTimeout(onClose, 2000);
     }
@@ -179,6 +198,7 @@ export default function VideoCall({
     localStreamRef.current = null;
     remoteDescSet.current = false;
     pendingCandidates.current = [];
+    setRemoteStreamLoaded(false);
   };
 
   const endCall = () => {
@@ -230,13 +250,19 @@ export default function VideoCall({
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex-1 relative overflow-hidden">
 
-        {/* Remote video */}
-        <video ref={remoteVideoRef} autoPlay playsInline
-          className={`w-full h-full object-cover transition-opacity duration-500 ${callStatus === "connected" ? "opacity-100" : "opacity-0"}`}
+        {/* Remote video - ALWAYS RENDERING (opacity controlled by CSS) */}
+        <video 
+          ref={remoteVideoRef} 
+          autoPlay 
+          playsInline
+          muted={false}
+          className={`w-full h-full object-cover transition-opacity duration-500 ${
+            remoteStreamLoaded && callStatus === "connected" ? "opacity-100" : "opacity-0"
+          }`}
         />
 
-        {/* Waiting overlay */}
-        {callStatus !== "connected" && (
+        {/* Waiting overlay - shows when remote stream not loaded */}
+        {!remoteStreamLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center mb-4 animate-pulse shadow-2xl">
               <span className="text-white text-4xl font-bold">{contact.displayName.charAt(0)}</span>
@@ -252,7 +278,13 @@ export default function VideoCall({
 
         {/* Local PiP */}
         <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gray-900">
-          <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            muted 
+            playsInline 
+            className="w-full h-full object-cover" 
+          />
           {isVideoOff && (
             <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
               <VideoOff className="w-6 h-6 text-gray-400" />
@@ -263,7 +295,7 @@ export default function VideoCall({
         {/* Contact name */}
         <div className="absolute top-4 left-4">
           <p className="text-white font-semibold text-lg drop-shadow">{contact.displayName}</p>
-          {callStatus === "connected" && <p className="text-green-400 text-sm">● Đang kết nối</p>}
+          {remoteStreamLoaded && <p className="text-green-400 text-sm">● Đang kết nối</p>}
         </div>
       </div>
 
