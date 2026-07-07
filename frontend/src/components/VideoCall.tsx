@@ -135,28 +135,28 @@ export default function VideoCall({
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
       console.log(`[${new Date().toLocaleTimeString()}] 🔌 Added local tracks`);
 
-      // ✅ FIX: Properly handle remote track - NO EARLY RETURN
+      // ✅ FIX: Handle ALL track types - set remote stream on FIRST track (audio or video)
       pc.ontrack = (event) => {
         console.log(`[${new Date().toLocaleTimeString()}] 📺 ontrack fired, kind: ${event.track.kind}, streams: ${event.streams.length}`);
         
-        if (event.track.kind === "video") {
-          const remoteStream = event.streams[0];
-          if (remoteStream && remoteVideoRef.current) {
-            console.log(`[${new Date().toLocaleTimeString()}] 🎥 Setting remote video stream`);
-            const trackStartTime = performance.now();
-            remoteVideoRef.current.srcObject = remoteStream;
-            
-            // Add loadedmetadata listener for stable playback
-            remoteVideoRef.current.onloadedmetadata = () => {
-              console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote video loaded (${(performance.now() - trackStartTime).toFixed(0)}ms), playing`);
-              remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
-            };
-            
-            // Mark remote stream as loaded
-            setRemoteStreamLoaded(true);
-            setCallStatus("connected");
-          }
-        }
+        const remoteStream = event.streams[0];
+        if (!remoteStream || !remoteVideoRef.current) return;
+
+        // Always set the remote stream (it contains both audio + video tracks)
+        remoteVideoRef.current.srcObject = remoteStream;
+        console.log(`[${new Date().toLocaleTimeString()}] 🎥 Remote stream set (tracks: ${remoteStream.getTracks().map(t => t.kind).join(', ')})`);
+
+        // Try to play immediately
+        remoteVideoRef.current.onloadedmetadata = () => {
+          console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote video metadata loaded, playing`);
+          remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
+        };
+
+        // Also try play directly (some browsers need this)
+        remoteVideoRef.current.play().catch(() => {});
+
+        setRemoteStreamLoaded(true);
+        setCallStatus("connected");
       };
 
       pc.onicecandidate = (event) => {
@@ -290,12 +290,12 @@ export default function VideoCall({
           playsInline
           muted={false}
           className={`w-full h-full object-cover transition-opacity duration-500 ${
-            remoteStreamLoaded && callStatus === "connected" ? "opacity-100" : "opacity-0"
+            remoteStreamLoaded || callStatus === "connected" ? "opacity-100" : "opacity-0"
           }`}
         />
 
-        {/* Waiting overlay - shows when remote stream not loaded */}
-        {!remoteStreamLoaded && (
+        {/* Waiting overlay - hide when connected OR remote stream loaded */}
+        {(!remoteStreamLoaded && callStatus !== "connected") && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#1F4E79] to-[#2E75B6] flex items-center justify-center mb-4 animate-pulse shadow-2xl">
               <span className="text-white text-4xl font-bold">{contact.displayName.charAt(0)}</span>
