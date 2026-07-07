@@ -32,15 +32,18 @@ export default function VideoCall({
 
   const fetchIceServers = async (): Promise<RTCIceServer[]> => {
     try {
+      console.log(`[${new Date().toLocaleTimeString()}] 🔄 Fetching TURN servers...`);
+      const turnStart = performance.now();
       const res = await fetch(METERED_API_URL);
       if (res.ok) {
         const servers = await res.json();
-        console.log("✅ Loaded Metered TURN servers:", servers.length);
+        console.log(`[${new Date().toLocaleTimeString()}] ✅ TURN loaded (${(performance.now() - turnStart).toFixed(0)}ms): ${servers.length} servers`);
         return servers;
       }
     } catch (err) {
-      console.warn("⚠️ TURN fetch failed, using STUN fallback:", err);
+      console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ TURN fetch failed:`, err);
     }
+    console.log(`[${new Date().toLocaleTimeString()}] 📡 Using STUN fallback`);
     return [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
@@ -62,8 +65,10 @@ export default function VideoCall({
     socket.on("callAccepted", async ({ signal }: { signal: any }) => {
       const pc = peerRef.current;
       if (!pc) return;
-      console.log("📞 Call accepted, setting remote description");
+      console.log(`[${new Date().toLocaleTimeString()}] 📞 Call accepted! Setting remote description`);
+      const acceptStart = performance.now();
       await setRemoteDescAndFlush(pc, signal);
+      console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote description set (${(performance.now() - acceptStart).toFixed(0)}ms)`);
       setCallStatus("connected");
     });
 
@@ -91,10 +96,15 @@ export default function VideoCall({
   }, []);
 
   const startCall = async (servers: RTCIceServer[]) => {
+    const callStartTime = performance.now();
     try {
+      console.log(`[${new Date().toLocaleTimeString()}] 🎬 Call init started`);
+      
       let stream: MediaStream;
       try {
+        const mediaStart = performance.now();
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        console.log(`[${new Date().toLocaleTimeString()}] 📷 getUserMedia took ${(performance.now() - mediaStart).toFixed(0)}ms`);
       } catch {
         console.warn("Camera unavailable, audio only");
         stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
@@ -109,20 +119,22 @@ export default function VideoCall({
       peerRef.current = pc;
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      console.log(`[${new Date().toLocaleTimeString()}] 🔌 Added local tracks`);
 
       // ✅ FIX: Properly handle remote track - NO EARLY RETURN
       pc.ontrack = (event) => {
-        console.log("📺 ontrack fired, track kind:", event.track.kind, "streams:", event.streams.length);
+        console.log(`[${new Date().toLocaleTimeString()}] 📺 ontrack fired, kind: ${event.track.kind}, streams: ${event.streams.length}`);
         
         if (event.track.kind === "video") {
           const remoteStream = event.streams[0];
           if (remoteStream && remoteVideoRef.current) {
-            console.log("🎥 Setting remote video stream");
+            console.log(`[${new Date().toLocaleTimeString()}] 🎥 Setting remote video stream`);
+            const trackStartTime = performance.now();
             remoteVideoRef.current.srcObject = remoteStream;
             
             // Add loadedmetadata listener for stable playback
             remoteVideoRef.current.onloadedmetadata = () => {
-              console.log("✅ Remote video metadata loaded, playing");
+              console.log(`[${new Date().toLocaleTimeString()}] ✅ Remote video loaded (${(performance.now() - trackStartTime).toFixed(0)}ms), playing`);
               remoteVideoRef.current?.play().catch(e => console.warn("play() failed:", e));
             };
             
@@ -143,14 +155,16 @@ export default function VideoCall({
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log("🌐 ICE state:", pc.iceConnectionState);
+        console.log(`[${new Date().toLocaleTimeString()}] 🌐 ICE state: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          console.log(`[${new Date().toLocaleTimeString()}] 🎉 ICE connected!`);
           setCallStatus("connected");
         } else if (pc.iceConnectionState === "failed") {
-          console.warn("⚠️ ICE failed — restarting ICE");
+          console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ ICE failed — restarting ICE`);
           pc.restartIce();
         } else if (pc.iceConnectionState === "disconnected") {
           // Wait 5s to see if it recovers
+          console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ ICE disconnected, waiting 5s...`);
           setTimeout(() => {
             if (pc.iceConnectionState === "disconnected") {
               console.error("❌ ICE still disconnected after 5s, ending call");
@@ -172,17 +186,22 @@ export default function VideoCall({
       };
 
       if (isIncoming && incomingSignal) {
-        console.log("📥 Incoming call, setting remote description");
+        console.log(`[${new Date().toLocaleTimeString()}] 📥 Incoming call, setting remote description`);
+        const remoteStart = performance.now();
         await setRemoteDescAndFlush(pc, incomingSignal);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        console.log(`[${new Date().toLocaleTimeString()}] 📨 Answer created & sent in ${(performance.now() - remoteStart).toFixed(0)}ms`);
         socket.emit("answerCall", { callerId: contact.id, signal: answer });
         // Don't set connected yet - wait for ontrack
       } else {
-        console.log("📤 Outgoing call, creating offer");
+        console.log(`[${new Date().toLocaleTimeString()}] 📤 Outgoing call, creating offer`);
+        const offerStart = performance.now();
         const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
+        console.log(`[${new Date().toLocaleTimeString()}] 📤 Offer created, sending to peer... (${(performance.now() - offerStart).toFixed(0)}ms)`);
         socket.emit("callUser", { receiverId: contact.id, signal: offer });
+        console.log(`[${new Date().toLocaleTimeString()}] ⏱️ Total call init: ${(performance.now() - callStartTime).toFixed(0)}ms`);
       }
     } catch (err) {
       console.error("❌ Call init error:", err);
