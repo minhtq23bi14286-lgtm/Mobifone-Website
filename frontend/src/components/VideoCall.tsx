@@ -35,13 +35,9 @@ export default function VideoCall({
   // ── ICE Servers: Metered TURN + Google STUN ──
   const fetchIceServers = async (): Promise<RTCIceServer[]> => {
     const fallbackServers: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  // TURN dự phòng miễn phí (OpenRelay) - hỗ trợ cả TCP/443 xuyên firewall
-  { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
-];
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
