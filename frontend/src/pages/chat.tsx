@@ -293,7 +293,12 @@ export default function Chat() {
     socket.on("messageReacted", ({ messageId, reactions }: { messageId: number; reactions: Record<string, string> }) => {
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions } : m));
     });
-    socket.on("incomingCall", ({ callerId, callerName, signal }: any) => setIncomingCall({ callerId, callerName, signal }));
+    socket.on("incomingCall", ({ callerId, callerName, signal }: any) => {
+  setIncomingCall(prev => {
+    if (prev) return prev; // Đang có cuộc gọi khác → bỏ qua
+    return { callerId, callerName, signal };
+  });
+});
     return () => { socket.disconnect(); };
   }, []);
 
@@ -617,7 +622,9 @@ export default function Chat() {
       )}
 
       {showVideoCall && activeContact && socketRef.current && (
-        <VideoCall socket={socketRef.current} currentUser={currentUser}
+        <VideoCall
+         key={incomingCall ? `in-${incomingCall.callerId}` : `out-${activeContact.id}`}
+         socket={socketRef.current} currentUser={currentUser}
           contact={incomingCall ? { id: incomingCall.callerId, displayName: incomingCall.callerName } : activeContact}
           isIncoming={!!incomingCall} incomingSignal={incomingCall?.signal}
           onClose={() => { setShowVideoCall(false); setIncomingCall(null); }} />
