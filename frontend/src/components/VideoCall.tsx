@@ -27,27 +27,16 @@ export default function VideoCall({
   const peerRef        = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
-  // Incoming ICE candidates buffered until remote description is set
+  // Incoming trickle candidates (bonus, not required with non-trickle ICE)
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSet     = useRef(false);
-
-  // ⭐ KEY FIX: Outgoing ICE candidates buffered until peer is READY to receive them.
-  // - Receiver (isIncoming): caller's VideoCall is already mounted → send immediately.
-  // - Caller: receiver's VideoCall only mounts AFTER they press Accept.
-  //   If we emit candidates before that, they are LOST (no listener on receiver side).
-  //   So the caller queues candidates and flushes them when "callAccepted" arrives.
-  const peerReady          = useRef(isIncoming);
-  const outgoingCandidates = useRef<RTCIceCandidateInit[]>([]);
-
-  const callEnded = useRef(false);
+  const callEnded         = useRef(false);
 
   // ── ICE Servers: Metered TURN + Google STUN ──
   const fetchIceServers = async (): Promise<RTCIceServer[]> => {
     const fallbackServers: RTCIceServer[] = [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun3.l.google.com:19302" },
-      { urls: "stun:stun4.l.google.com:19302" },
     ];
     try {
       const controller = new AbortController();
@@ -65,30 +54,43 @@ export default function VideoCall({
     return fallbackServers;
   };
 
-  const sendCandidate = (candidate: RTCIceCandidateInit) => {
-    socket.emit("iceCandidate", { receiverId: contact.id, candidate });
-  };
-
-  const flushOutgoingCandidates = () => {
-    if (outgoingCandidates.current.length > 0) {
-      console.log(`[ICE] Flushing ${outgoingCandidates.current.length} buffered outgoing candidates`);
-      outgoingCandidates.current.forEach(sendCandidate);
-      outgoingCandidates.current = [];
-    }
+  // ⭐ KEY FIX: Non-trickle ICE.
+  // Wait until ICE gathering completes so the SDP contains ALL candidates
+  // (host + STUN + TURN relay). Then we only need to send ONE signal message.
+  // => No more lost trickle candidates over the flaky socket relay.
+  // => Works for same-network (host) AND cross-network (STUN/TURN) automatically.
+  const waitForIceGathering = (pc: RTCPeerConnection, timeoutMs = 4000): Promise<void> => {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === "complete") { resolve(); return; }
+      const timer = setTimeout(() => {
+        console.warn("[ICE] Gathering timeout, sending SDP with candidates collected so far");
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }, timeoutMs);
+      const check = () => {
+        if (pc.iceGatheringState === "complete") {
+          clearTimeout(timer);
+          pc.removeEventListener("icegatheringstatechange", check);
+          console.log("[ICE] Gathering complete — all candidates embedded in SDP");
+          resolve();
+        }
+      };
+      pc.addEventListener("icegatheringstatechange", check);
+    });
   };
 
   const setRemoteDescAndFlush = async (pc: RTCPeerConnection, signal: any) => {
     if (pc.signalingState === "closed" || remoteDescSet.current) return;
     await pc.setRemoteDescription(new RTCSessionDescription(signal));
     remoteDescSet.current = true;
-    console.log(`[SDP] Remote description set, adding ${pendingCandidates.current.length} pending candidates`);
+    console.log(`[SDP] Remote description set (+${pendingCandidates.current.length} pending candidates)`);
     for (const c of pendingCandidates.current) {
       try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
     }
     pendingCandidates.current = [];
   };
 
-  // ── Attach remote stream (⭐ audio fix: always re-attach, no guard) ──
+  // ── Attach remote stream — always re-attach so audio track is never dropped ──
   const attachRemoteStream = (stream: MediaStream) => {
     const el = remoteVideoRef.current;
     if (!el) return;
@@ -97,9 +99,7 @@ export default function VideoCall({
       el.srcObject = stream;
     }
     el.volume = 1.0;
-    const tryPlay = () => {
-      el.play().catch(() => setTimeout(tryPlay, 500));
-    };
+    const tryPlay = () => { el.play().catch(() => setTimeout(tryPlay, 500)); };
     el.onloadedmetadata = tryPlay;
     tryPlay();
   };
@@ -109,16 +109,14 @@ export default function VideoCall({
     fetchIceServers().then(startCall);
 
     const onCallAccepted = async ({ signal }: { signal: any }) => {
-      console.log("[SIGNAL] callAccepted received");
+      console.log("[SIGNAL] callAccepted received (answer SDP with full candidates)");
       const pc = peerRef.current;
       if (!pc || pc.signalingState === "closed") return;
       await setRemoteDescAndFlush(pc, signal);
-      // ⭐ Receiver has mounted VideoCall — now safe to send buffered candidates
-      peerReady.current = true;
-      flushOutgoingCandidates();
       setCallStatus("connected");
     };
 
+    // Kept for backward-compat: if any trickle candidates arrive, still add them
     const onIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
       if (!candidate) return;
       const pc = peerRef.current;
@@ -161,6 +159,7 @@ export default function VideoCall({
   const startCall = async (servers: RTCIceServer[]) => {
     if (callEnded.current) return;
     try {
+      // 1. Local media
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -174,42 +173,35 @@ export default function VideoCall({
         localVideoRef.current.play().catch(() => {});
       }
 
+      // 2. Peer connection
       const pc = new RTCPeerConnection({
         iceServers: servers,
         iceTransportPolicy: "all",
-        iceCandidatePoolSize: 10,
       });
       peerRef.current = pc;
 
+      // 3. Local tracks
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
+      // 4. Remote tracks
       pc.ontrack = (event) => {
-        console.log(`[TRACK] ontrack: ${event.track.kind}, streams: ${event.streams.length}`);
+        console.log(`[TRACK] ontrack: ${event.track.kind}`);
         if (event.streams[0]) {
           attachRemoteStream(event.streams[0]);
           setCallStatus("connected");
         }
       };
 
+      // 5. Log candidate types while gathering (they go INTO the SDP, not the socket)
       pc.onicecandidate = (event) => {
-        if (!event.candidate) {
-          console.log("[ICE] Gathering complete");
-          return;
-        }
-        const c = event.candidate.candidate;
-        const type = c.includes("relay") ? "TURN" : c.includes("srflx") ? "STUN" : "host";
-        const json = event.candidate.toJSON();
-
-        if (peerReady.current) {
-          console.log(`[ICE] Candidate sent: ${type}`);
-          sendCandidate(json);
-        } else {
-          // ⭐ Caller: receiver hasn't accepted yet → buffer
-          console.log(`[ICE] Candidate buffered: ${type}`);
-          outgoingCandidates.current.push(json);
+        if (event.candidate) {
+          const c = event.candidate.candidate;
+          const type = c.includes("relay") ? "TURN" : c.includes("srflx") ? "STUN" : "host";
+          console.log(`[ICE] Gathered candidate: ${type}`);
         }
       };
 
+      // 6. Connection state monitoring
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
         console.log(`[ICE] State: ${state}`);
@@ -218,36 +210,20 @@ export default function VideoCall({
         } else if (state === "failed") {
           console.warn("[ICE] Failed, restarting...");
           pc.restartIce();
+          setTimeout(() => {
+            if (callEnded.current) return;
+            if (pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
+              console.error("[ICE] Failed after retry");
+              callEnded.current = true;
+              setCallStatus("ended");
+              setTimeout(onClose, 2000);
+            }
+          }, 15000);
         } else if (state === "disconnected") {
           setTimeout(() => {
             if (callEnded.current) return;
             if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
-              console.warn("[ICE] Still disconnected, restarting...");
-              pc.restartIce();
-              setTimeout(() => {
-                if (callEnded.current) return;
-                if (pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
-                  console.error("[ICE] Failed after retry");
-                  callEnded.current = true;
-                  setCallStatus("ended");
-                  setTimeout(onClose, 2000);
-                }
-              }, 15000);
-            }
-          }, 15000);
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log(`[CONN] State: ${pc.connectionState}`);
-        if (pc.connectionState === "connected") {
-          setCallStatus("connected");
-        } else if (pc.connectionState === "failed") {
-          console.warn("[CONN] Failed, restarting ICE...");
-          pc.restartIce();
-          setTimeout(() => {
-            if (callEnded.current) return;
-            if (pc.connectionState !== "connected") {
+              console.error("[ICE] Disconnected too long, ending call");
               callEnded.current = true;
               setCallStatus("ended");
               setTimeout(onClose, 2000);
@@ -256,19 +232,27 @@ export default function VideoCall({
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        console.log(`[CONN] State: ${pc.connectionState}`);
+        if (pc.connectionState === "connected") setCallStatus("connected");
+      };
+
+      // 7. Offer / Answer with FULL candidates embedded (non-trickle)
       if (isIncoming && incomingSignal) {
-        console.log("[CALL] Incoming: setting remote desc + creating answer");
+        console.log("[CALL] Incoming: setting remote offer + creating answer");
         await setRemoteDescAndFlush(pc, incomingSignal);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit("answerCall", { callerId: contact.id, signal: answer });
-        console.log("[CALL] Answer sent to caller");
+        await waitForIceGathering(pc);                        // ⭐ wait for all candidates
+        socket.emit("answerCall", { callerId: contact.id, signal: pc.localDescription });
+        console.log("[CALL] Answer sent (full SDP with all candidates)");
       } else {
         console.log("[CALL] Outgoing: creating offer");
         const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
-        socket.emit("callUser", { receiverId: contact.id, signal: offer });
-        console.log("[CALL] Offer sent to receiver (ICE candidates buffered until accept)");
+        await waitForIceGathering(pc);                        // ⭐ wait for all candidates
+        socket.emit("callUser", { receiverId: contact.id, signal: pc.localDescription });
+        console.log("[CALL] Offer sent (full SDP with all candidates)");
       }
     } catch (err) {
       console.error("[CALL] Init error:", err);
@@ -287,7 +271,6 @@ export default function VideoCall({
     localStreamRef.current = null;
     remoteDescSet.current = false;
     pendingCandidates.current = [];
-    outgoingCandidates.current = [];
   };
 
   const endCall = () => {
