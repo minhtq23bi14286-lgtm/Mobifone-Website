@@ -1,7 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import express from 'express'; 
+import express from 'express';
 import { join } from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -14,6 +14,7 @@ import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
 import { HomeModule } from './home/home.module';
 import { LoggingMiddleware } from './common/logging.middleware';
+import { SeedService } from './database/seed.service';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -49,8 +50,16 @@ const isProduction = process.env.NODE_ENV === 'production';
     SystemModule,
     HomeModule,
   ],
+  providers: [SeedService],  // ✅ Thêm SeedService
 })
 export class AppModule implements NestModule {
+  constructor(private seedService: SeedService) {}
+
+  // ✅ Khi app start, tự động chạy seed
+  async onModuleInit() {
+    await this.seedService.seed();
+  }
+
   configure(consumer: MiddlewareConsumer) {
     // ✅ Middleware 1: Serve static files từ uploads folder
     // 
