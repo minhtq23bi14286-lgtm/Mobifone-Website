@@ -14,6 +14,7 @@ import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
 import { HomeModule } from './home/home.module';
 import { LoggingMiddleware } from './common/logging.middleware';
+import { User } from './users/user.entity';
 import { SeedService } from './database/seed.service';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -39,6 +40,7 @@ const isProduction = process.env.NODE_ENV === 'production';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
+    TypeOrmModule.forFeature([User]),
     AuthModule,
     UsersModule,
     ChatModule,
@@ -50,40 +52,20 @@ const isProduction = process.env.NODE_ENV === 'production';
     SystemModule,
     HomeModule,
   ],
-  providers: [SeedService],  // ✅ Thêm SeedService
+  providers: [SeedService],
 })
 export class AppModule implements NestModule {
   constructor(private seedService: SeedService) {}
 
-  // ✅ Khi app start, tự động chạy seed
   async onModuleInit() {
     await this.seedService.seed();
   }
 
   configure(consumer: MiddlewareConsumer) {
-    // ✅ Middleware 1: Serve static files từ uploads folder
-    // 
-    // Cách hoạt động:
-    // - express.static() là middleware của Express framework
-    // - Nó serve các file từ thư mục uploads tới client
-    // - Khi request đến /uploads/chat/filename, Express tự động 
-    //   tìm file tương ứng và trả về
-    //
-    // Lợi ích:
-    // - Frontend có thể xem preview file sau khi upload
-    // - Người dùng có thể download file
-    // - Hình ảnh/PDF được render trong browser
     consumer
       .apply(express.static(join(__dirname, '..', 'uploads')))
       .forRoutes('/uploads');
 
-    // ✅ Middleware 2: HTTP Logging middleware
-    // 
-    // Ghi log response time của mỗi HTTP request:
-    // GET /api/posts → 200 | 95ms
-    // POST /api/posts → 201 | 450ms
-    // 
-    // Dùng để đo hiệu năng backend
     consumer.apply(LoggingMiddleware).forRoutes('*');
   }
 }
