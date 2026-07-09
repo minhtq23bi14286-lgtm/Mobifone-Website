@@ -1,14 +1,17 @@
 import { DataSource } from 'typeorm';
 import { User } from './user.entity';
 import * as bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 const AppDataSource = new DataSource({
   type: 'postgres',
-  host: 'localhost',
-  port: 5432,
-  username: 'postgres',
-  password: 'Tranminh999!@#',
-  database: 'mobifone_db',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  username: process.env.DB_USERNAME || 'postgres',
+  password: process.env.DB_PASSWORD,  
+  database: process.env.DB_DATABASE || 'mobifone_db',
   entities: [User],
   synchronize: false,
 });
@@ -27,7 +30,7 @@ async function seed() {
   });
 
   await userRepo.save(user);
-  console.log('✅ Tạo user thành công!');
+  console.log('Tạo user thành công!');
   await AppDataSource.destroy();
 }
 

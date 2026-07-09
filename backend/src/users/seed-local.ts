@@ -1,21 +1,24 @@
 import { DataSource } from 'typeorm';
 import { User } from './user.entity';
 import * as bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 const AppDataSource = new DataSource({
   type: 'postgres',
-  host: 'localhost',
-  port: 5432,
-  username: 'postgres',
-  password: 'Tranminh999!@#',
-  database: 'mobifone_db',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  username: process.env.DB_USERNAME || 'postgres',
+  password: process.env.DB_PASSWORD,  
+  database: process.env.DB_DATABASE || 'mobifone_db',
   entities: [User],
   synchronize: true,
 });
 
 async function seed() {
   await AppDataSource.initialize();
-  console.log('✅ Kết nối PostgreSQL local thành công!');
+  console.log('Kết nối PostgreSQL local thành công!');
 
   const userRepo = AppDataSource.getRepository(User);
   const hash = await bcrypt.hash('admin123', 12);
@@ -31,9 +34,9 @@ async function seed() {
       department: 'IT Department',
       isActive: true,
     }));
-    console.log('📧 admin@mobifone.vn / admin123');
+    console.log('admin@mobifone.vn / admin123');
   } else {
-    console.log('⚠️ Admin đã tồn tại');
+    console.log('Admin đã tồn tại');
   }
 
   // Employee 1
@@ -47,9 +50,9 @@ async function seed() {
       department: 'IT Department',
       isActive: true,
     }));
-    console.log('📧 quangminh@mobifone.vn / admin123');
+    console.log('quangminh@mobifone.vn / admin123');
   } else {
-    console.log('⚠️ Employee 1 đã tồn tại');
+    console.log('Employee 1 đã tồn tại');
   }
 
   // Employee 2
@@ -63,16 +66,16 @@ async function seed() {
       department: 'Marketing',
       isActive: true,
     }));
-    console.log('📧 employee2@mobifone.vn / admin123');
+    console.log('employee2@mobifone.vn / admin123');
   } else {
-    console.log('⚠️ Employee 2 đã tồn tại');
+    console.log('Employee 2 đã tồn tại');
   }
 
   await AppDataSource.destroy();
-  console.log('✅ Seed hoàn tất!');
+  console.log('Seed hoàn tất!');
 }
 
 seed().catch(err => {
-  console.error('❌ Lỗi seed:', err);
+  console.error('Lỗi seed:', err);
   process.exit(1);
 });

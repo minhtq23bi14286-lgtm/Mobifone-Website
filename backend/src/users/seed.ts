@@ -1,10 +1,14 @@
 import { DataSource } from 'typeorm';
 import { User } from './user.entity';
 import * as bcrypt from 'bcrypt';
+import * as dotenv from 'dotenv';
+
+
+dotenv.config();
 
 const AppDataSource = new DataSource({
   type: 'postgres',
-  url: 'postgresql://postgres.zbnizxsmgunavzblcwiq:Tranminh999!@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres',
+  url: process.env.DATABASE_URL, 
   entities: [User],
   synchronize: true,
   ssl: { rejectUnauthorized: false },
@@ -12,14 +16,13 @@ const AppDataSource = new DataSource({
 
 async function seed() {
   await AppDataSource.initialize();
-  console.log('✅ Kết nối Supabase thành công!');
+  console.log('Kết nối Supabase thành công!');
 
   const userRepo = AppDataSource.getRepository(User);
 
-  // Kiểm tra đã có chưa
   const existingAdmin = await userRepo.findOne({ where: { email: 'admin@mobifone.vn' } });
   if (existingAdmin) {
-    console.log('⚠️ Admin đã tồn tại, bỏ qua...');
+    console.log('Admin đã tồn tại, bỏ qua...');
   } else {
     const hash = await bcrypt.hash('admin123', 12);
 
@@ -42,15 +45,15 @@ async function seed() {
     });
 
     await userRepo.save([admin, employee]);
-    console.log('✅ Seed thành công!');
-    console.log('📧 admin@mobifone.vn / admin123');
-    console.log('📧 quangminh@mobifone.vn / admin123');
+    console.log('Seed thành công!');
+    console.log('admin@mobifone.vn / admin123');
+    console.log('quangminh@mobifone.vn / admin123');
   }
 
   await AppDataSource.destroy();
 }
 
 seed().catch(err => {
-  console.error('❌ Lỗi seed:', err);
+  console.error('Lỗi seed:', err);
   process.exit(1);
 });

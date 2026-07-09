@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ServeStaticModule } from '@nestjs/serve-static';
+import express from 'express'; 
 import { join } from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -13,7 +13,6 @@ import { AdminModule } from './admin/admin.module';
 import { SecurityModule } from './security/security.module';
 import { SystemModule } from './system/system.module';
 import { HomeModule } from './home/home.module';
-import { NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { LoggingMiddleware } from './common/logging.middleware';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -39,10 +38,6 @@ const isProduction = process.env.NODE_ENV === 'production';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
-    }),
     AuthModule,
     UsersModule,
     ChatModule,
@@ -55,9 +50,31 @@ const isProduction = process.env.NODE_ENV === 'production';
     HomeModule,
   ],
 })
-
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // ✅ Middleware 1: Serve static files từ uploads folder
+    // 
+    // Cách hoạt động:
+    // - express.static() là middleware của Express framework
+    // - Nó serve các file từ thư mục uploads tới client
+    // - Khi request đến /uploads/chat/filename, Express tự động 
+    //   tìm file tương ứng và trả về
+    //
+    // Lợi ích:
+    // - Frontend có thể xem preview file sau khi upload
+    // - Người dùng có thể download file
+    // - Hình ảnh/PDF được render trong browser
+    consumer
+      .apply(express.static(join(__dirname, '..', 'uploads')))
+      .forRoutes('/uploads');
+
+    // ✅ Middleware 2: HTTP Logging middleware
+    // 
+    // Ghi log response time của mỗi HTTP request:
+    // GET /api/posts → 200 | 95ms
+    // POST /api/posts → 201 | 450ms
+    // 
+    // Dùng để đo hiệu năng backend
     consumer.apply(LoggingMiddleware).forRoutes('*');
   }
 }
