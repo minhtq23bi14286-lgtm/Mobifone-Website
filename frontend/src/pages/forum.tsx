@@ -344,9 +344,34 @@ export default function Forum() {
   const border = darkMode ? "border-white/5" : "border-gray-100";
   const inputBg = darkMode ? "bg-[#0f1117] border-white/10 text-white placeholder-gray-500" : "bg-gray-50 border-gray-200 text-gray-800 placeholder-gray-400";
 
-  const previewAttachments: Attachment[] = (Array.isArray(selectedPost?.attachments)
-    ? selectedPost!.attachments : []
-  ).map(a => { try { return JSON.parse(a); } catch { return null; } }).filter(Boolean);
+  const previewAttachments: Attachment[] = (() => {
+  const raw = selectedPost?.attachments;
+  if (!raw) return [];
+  
+  // Normalize thành array
+  let arr: any[];
+  if (Array.isArray(raw)) {
+    arr = raw;
+  } else if (typeof raw === 'string') {
+    // Có thể là 1 string JSON đơn hoặc array JSON đã stringify
+    try {
+      const parsed = JSON.parse(raw);
+      arr = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  } else if (typeof raw === 'object') {
+    arr = [raw];
+  } else {
+    return [];
+  }
+  
+  return arr.map((a: any) => {
+    if (!a) return null;
+    if (typeof a === 'object') return a as Attachment;
+    try { return JSON.parse(a) as Attachment; } catch { return null; }
+  }).filter(Boolean) as Attachment[];
+})();
 
   const previewColorIndex = selectedPost ? filteredPosts.findIndex(p => p.id === selectedPost.id) % POST_COLORS.length : 0;
   const compact = !!selectedPost;

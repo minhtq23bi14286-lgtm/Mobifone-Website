@@ -15,6 +15,7 @@ import { SystemModule } from './system/system.module';
 import { HomeModule } from './home/home.module';
 import { LoggingMiddleware } from './common/logging.middleware';
 import { User } from './users/user.entity';
+import { LoginHistory } from './security/login-history.entity';
 import { SeedService } from './database/seed.service';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -40,7 +41,7 @@ const isProduction = process.env.NODE_ENV === 'production';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, LoginHistory]),
     AuthModule,
     UsersModule,
     ChatModule,
@@ -62,10 +63,15 @@ export class AppModule implements NestModule {
   }
 
   configure(consumer: MiddlewareConsumer) {
+    // Middleware: Serve static files tu thu muc uploads
+    // express.static() la middleware cua Express framework
+    // Khi request den /uploads/chat/filename, Express tu dong
+    // tim file tuong ung va tra ve cho client
     consumer
       .apply(express.static(join(__dirname, '..', 'uploads')))
       .forRoutes('/uploads');
 
+    // Middleware: Logging - ghi response time cua moi HTTP request
     consumer.apply(LoggingMiddleware).forRoutes('*');
   }
 }

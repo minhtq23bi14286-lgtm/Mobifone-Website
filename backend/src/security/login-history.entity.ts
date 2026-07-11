@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../users/user.entity';
 
 export type LoginStatus = 'success' | 'failed' | 'blocked';
 
@@ -9,6 +10,10 @@ export class LoginHistory {
 
   @Column({ nullable: true })
   userId?: number;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'userId' })
+  user?: User;
 
   @Column()
   email!: string;

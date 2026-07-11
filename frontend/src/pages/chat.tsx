@@ -230,7 +230,6 @@ export default function Chat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const currentUser = JSON.parse(sessionStorage.getItem("user") || "{}");
 
-  // 🔔 Read userId from URL query param (from notification click)
   const [searchParams, setSearchParams] = useSearchParams();
   const targetUserId = searchParams.get("userId");
 
@@ -242,7 +241,9 @@ export default function Chat() {
         const res = await fetch("/api/users/contacts", { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const data = await res.json();
-        const filtered = (Array.isArray(data) ? data : []).filter((u: Contact) => u.id !== currentUser.id);
+        const filtered = (Array.isArray(data) ? data : []).filter((u: Contact) => 
+  u.id !== currentUser.id && u.role !== 'admin'
+);
         setContacts(filtered);
         if (filtered.length > 0 && !targetUserId) setActiveContact(filtered[0]);
       } catch (err) { console.error(err); }
@@ -250,14 +251,12 @@ export default function Chat() {
     fetchUsers();
   }, []);
 
-  // 🔔 Auto-select contact from notification click (?userId=...)
   useEffect(() => {
     if (!targetUserId || contacts.length === 0) return;
     const target = contacts.find(c => c.id === Number(targetUserId));
     if (target) {
       setActiveContact(target);
-      setShowContactList(false); // mobile: hide contact list, show chat
-      // Clear the query param so it doesn't re-trigger
+      setShowContactList(false);
       setSearchParams({}, { replace: true });
     }
   }, [targetUserId, contacts]);
@@ -268,9 +267,9 @@ export default function Chat() {
     const token = sessionStorage.getItem("accessToken");
     if (!token) return;
     const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', { 
-  auth: { token },
-  transports: ['websocket', 'polling'],
-});
+      auth: { token },
+      transports: ['websocket', 'polling'],
+    });
     socketRef.current = socket;
     socket.on("connect", () => socket.emit("getOnlineUsers"));
     socket.on("onlineUsers", (users: number[]) => setOnlineUsers(users));
@@ -294,11 +293,11 @@ export default function Chat() {
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions } : m));
     });
     socket.on("incomingCall", ({ callerId, callerName, signal }: any) => {
-  setIncomingCall(prev => {
-    if (prev) return prev; // Đang có cuộc gọi khác → bỏ qua
-    return { callerId, callerName, signal };
-  });
-});
+      setIncomingCall(prev => {
+        if (prev) return prev;
+        return { callerId, callerName, signal };
+      });
+    });
     return () => { socket.disconnect(); };
   }, []);
 
@@ -388,10 +387,8 @@ export default function Chat() {
   return (
     <div className="flex flex-1 h-full bg-white overflow-hidden">
 
-      {/* ── Col 1: Chat area ── */}
       <div className={`flex-1 flex flex-col min-w-0 ${showContactList ? "hidden sm:flex" : "flex"}`}>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-white">
           {activeContact ? (
             <>
@@ -424,7 +421,6 @@ export default function Chat() {
           ) : <p className="text-gray-400 text-sm">Chọn một cuộc trò chuyện</p>}
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50">
           {messages.length === 0 && !isTyping && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
@@ -456,7 +452,6 @@ export default function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Reply bar */}
         {replyingTo && (
           <div className="px-4 py-2 bg-blue-50 border-t border-blue-100 flex items-center gap-3">
             <Reply className="w-4 h-4 text-[#1F4E79] flex-shrink-0" />
@@ -468,7 +463,6 @@ export default function Chat() {
           </div>
         )}
 
-        {/* Input */}
         <div className="px-4 py-3 bg-white border-t border-gray-100">
           <div className="flex items-center gap-2">
             <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}
@@ -481,17 +475,17 @@ export default function Chat() {
                 onChange={e => handleTyping(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
                 className="flex-1 bg-transparent text-sm focus:outline-none text-gray-800 placeholder-gray-400 min-w-0" />
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="relative">
                   <button onClick={() => { setShowGifPicker(v => !v); setShowEmojiPicker(false); }}
-                    className={`px-1.5 py-0.5 rounded-md text-[11px] font-bold transition-colors border ${showGifPicker ? "bg-[#1F4E79] text-white border-[#1F4E79]" : "text-gray-400 border-gray-300 hover:border-[#1F4E79] hover:text-[#1F4E79]"}`}>
+                    className={`p-2 rounded-lg transition-colors text-xs font-bold ${showGifPicker ? "bg-[#1F4E79] text-white" : "text-gray-400 hover:text-[#1F4E79] hover:bg-gray-100"}`}>
                     GIF
                   </button>
                   {showGifPicker && <GiphyPicker onSelect={handleSendGif} onClose={() => setShowGifPicker(false)} />}
                 </div>
                 <div className="relative">
                   <button onClick={() => { setShowEmojiPicker(v => !v); setShowGifPicker(false); }}
-                    className={`transition-colors ${showEmojiPicker ? "text-[#1F4E79]" : "text-gray-400 hover:text-[#1F4E79]"}`}>
+                    className={`p-2 rounded-lg transition-colors text-gray-400 hover:text-[#1F4E79] hover:bg-gray-100 ${showEmojiPicker ? "text-[#1F4E79] bg-gray-100" : ""}`}>
                     <Smile className="w-5 h-5" />
                   </button>
                   {showEmojiPicker && (
@@ -513,7 +507,6 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* ── Col 2: Contact list (bên PHẢI) ── */}
       <div className={`
         flex-col bg-white border-l border-gray-100
         w-full sm:w-72 sm:flex sm:flex-shrink-0
@@ -549,7 +542,7 @@ export default function Chat() {
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
                     <p className={`text-xs truncate ${unread > 0 ? "text-gray-800 font-semibold" : "text-gray-500"}`}>
-                      {last ? (last.senderId === currentUser.id ? "Bạn: " : "") + (last.fileType === "gif" ? "🎬 GIF" : last.fileType === "image" ? "📷 Hình ảnh" : last.fileType === "file" ? "📎 File" : last.content || "") : contact.department}
+                      {last ? (last.senderId === currentUser.id ? "Bạn: " : "") + (last.fileType === "gif" ? "GIF" : last.fileType === "image" ? "Hình ảnh" : last.fileType === "file" ? "File" : last.content || "") : contact.department}
                     </p>
                     {unread > 0 && <span className="ml-1 min-w-[18px] h-[18px] bg-[#1F4E79] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 flex-shrink-0">{unread > 99 ? "99+" : unread}</span>}
                   </div>
@@ -566,7 +559,6 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* ── Modal: Xác nhận xóa lịch sử ── */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl p-8 w-80 max-w-full text-center shadow-2xl">
@@ -593,7 +585,6 @@ export default function Chat() {
         </div>
       )}
 
-      {/* ── Incoming call ── */}
       {incomingCall && !showVideoCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl p-8 w-80 max-w-full text-center shadow-2xl">
@@ -623,8 +614,8 @@ export default function Chat() {
 
       {showVideoCall && activeContact && socketRef.current && (
         <VideoCall
-         key={incomingCall ? `in-${incomingCall.callerId}` : `out-${activeContact.id}`}
-         socket={socketRef.current} currentUser={currentUser}
+          key={incomingCall ? `in-${incomingCall.callerId}` : `out-${activeContact.id}`}
+          socket={socketRef.current} currentUser={currentUser}
           contact={incomingCall ? { id: incomingCall.callerId, displayName: incomingCall.callerName } : activeContact}
           isIncoming={!!incomingCall} incomingSignal={incomingCall?.signal}
           onClose={() => { setShowVideoCall(false); setIncomingCall(null); }} />

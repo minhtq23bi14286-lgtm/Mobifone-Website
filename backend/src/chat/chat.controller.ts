@@ -31,6 +31,16 @@ export class ChatController {
     fileFilter: uploadFileFilter,
   }))
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return { url: `/uploads/chat/${file.filename}` };
+  const mime = file.mimetype;
+  let fileType: 'image' | 'file' = 'file';
+  if (mime.startsWith('image/')) {
+    fileType = 'image';
   }
+
+  return {
+    fileUrl: `/uploads/chat/${file.filename}`,
+    fileName: file.originalname,
+    fileType: fileType,
+  };
+}
 }

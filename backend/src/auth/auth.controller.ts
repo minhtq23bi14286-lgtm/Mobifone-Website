@@ -2,11 +2,16 @@ import {
   Controller, Post, Get, Body, Request,
   UseGuards, HttpCode, HttpStatus, Req,
 } from '@nestjs/common';
+import { IsEmail, IsString, IsNotEmpty } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 class LoginDto {
+  @IsEmail()
   email!: string;
+
+  @IsString()
+  @IsNotEmpty()
   password!: string;
 }
 
