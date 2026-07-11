@@ -27,17 +27,14 @@ export class AuthService {
       await this.securityService.logLogin(email, 'failed', ipAddress, userAgent, undefined, 'Email không tồn tại');
       throw new UnauthorizedException('Không tìm thấy tài khoản với email này!');
     }
-    console.log('DEBUG user:', user.email, '| isActive =', user.isActive, '| type:', typeof user.isActive);
+    
 
     // Kiểm tra tài khoản có active không
     if (!user.isActive) {
       await this.securityService.logLogin(email, 'failed', ipAddress, userAgent, user.id, 'Tài khoản bị vô hiệu hóa');
       throw new UnauthorizedException('Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.');
     }
-    console.log('DEBUG password check:', 
-  '| input password:', JSON.stringify(password), 
-  '| hash exists:', !!user.password,
-  '| hash:', user.password?.substring(0, 20));
+    
     // Kiểm tra password
     const isPasswordValid = await this.usersService.validatePassword(password, user.password);
     if (!isPasswordValid) {
