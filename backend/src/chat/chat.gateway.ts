@@ -189,7 +189,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Giữ nguyên các handler video call
   @SubscribeMessage('callUser')
   async handleCallUser(@ConnectedSocket() client: Socket, @MessageBody() data: { receiverId: number; signal: any }) {
-    const receiverSocketId = this.connectedUsers.get(data.receiverId);
+    const receiverSocketId = this.connectedUsers.get(Number(data.receiverId));
     if (receiverSocketId) {
       this.server.to(receiverSocketId).emit('incomingCall', {
         callerId: client.data.userId, callerName: client.data.displayName, signal: data.signal,
@@ -199,25 +199,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('answerCall')
   handleAnswerCall(@ConnectedSocket() client: Socket, @MessageBody() data: { callerId: number; signal: any }) {
-    const callerSocketId = this.connectedUsers.get(data.callerId);
+    const callerId = Number(data.callerId);
+    const callerSocketId = this.connectedUsers.get(callerId);
+    console.log(`[answerCall] callerId=${callerId}, found=${!!callerSocketId}`);
     if (callerSocketId) this.server.to(callerSocketId).emit('callAccepted', { signal: data.signal });
   }
 
   @SubscribeMessage('rejectCall')
   handleRejectCall(@ConnectedSocket() client: Socket, @MessageBody() data: { callerId: number }) {
-    const callerSocketId = this.connectedUsers.get(data.callerId);
+    const callerSocketId = this.connectedUsers.get(Number(data.callerId));
     if (callerSocketId) this.server.to(callerSocketId).emit('callRejected', { rejectedBy: client.data.displayName });
   }
 
   @SubscribeMessage('endCall')
   handleEndCall(@ConnectedSocket() client: Socket, @MessageBody() data: { receiverId: number }) {
-    const receiverSocketId = this.connectedUsers.get(data.receiverId);
+    const receiverSocketId = this.connectedUsers.get(Number(data.receiverId));
     if (receiverSocketId) this.server.to(receiverSocketId).emit('callEnded');
   }
 
   @SubscribeMessage('iceCandidate')
   handleIceCandidate(@ConnectedSocket() client: Socket, @MessageBody() data: { receiverId: number; candidate: any }) {
-    const receiverSocketId = this.connectedUsers.get(data.receiverId);
+    const receiverSocketId = this.connectedUsers.get(Number(data.receiverId));
     if (receiverSocketId) this.server.to(receiverSocketId).emit('iceCandidate', { candidate: data.candidate });
   }
 }
