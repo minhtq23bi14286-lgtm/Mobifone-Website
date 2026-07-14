@@ -381,7 +381,13 @@ export default function Chat() {
     setShowContactList(false);
   };
 
-  const filteredContacts = contacts.filter(c => c.displayName.toLowerCase().includes(search.toLowerCase()));
+  const filteredContacts = contacts
+    .filter(c => c.displayName.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const timeA = lastMessages[a.id]?.lastMessage?.createdAt || "";
+      const timeB = lastMessages[b.id]?.lastMessage?.createdAt || "";
+      return timeB > timeA ? 1 : timeB < timeA ? -1 : 0;
+    });
   const totalUnread = Object.values(lastMessages).reduce((sum, info) => sum + (info.unreadCount || 0), 0);
 
   return (

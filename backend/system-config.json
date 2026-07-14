@@ -7,5 +7,5 @@
     "gifSearch": true,
     "notifications": true
   },
-  "maxFileSizeMB": 50
+  "maxFileSizeMB": 5
 }
